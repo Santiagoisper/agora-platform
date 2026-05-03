@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
     <main className="relative min-h-screen overflow-hidden flex flex-col">
@@ -53,9 +55,9 @@ export default function Home() {
         </p>
 
         <div className="animate-fade-up delay-500 flex items-center gap-4">
-          <button className="btn-primary px-7 py-3 rounded-xl text-white font-semibold text-base">
+          <Link href="/create-bot" className="btn-primary px-7 py-3 rounded-xl text-white font-semibold text-base">
             Create your first bot →
-          </button>
+          </Link>
           <button className="glass px-7 py-3 rounded-xl text-white/70 hover:text-white font-medium text-base transition-colors">
             Watch a live room
           </button>
