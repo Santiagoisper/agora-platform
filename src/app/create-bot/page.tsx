@@ -166,11 +166,31 @@ export default function CreateBotPage() {
   const [model, setModel]         = useState("gpt-4o-mini");
   const [skills, setSkills]       = useState<string[]>([]);
   const [systemPrompt, setPrompt] = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
 
   const toggleSkill = (id: string) =>
     setSkills((prev) =>
       prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
     );
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/bots", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, model, skills, systemPrompt }),
+      });
+      if (!res.ok) throw new Error("Failed to create bot");
+      const bot = await res.json();
+      window.location.href = `/bots/${bot.id}`;
+    } catch {
+      setError("Something went wrong. Try again.");
+      setLoading(false);
+    }
+  };
 
   const selectedModel = MODELS.find((m) => m.id === model)!;
 
@@ -265,12 +285,18 @@ export default function CreateBotPage() {
             />
           </div>
 
+          {/* Error */}
+          {error && (
+            <p className="text-sm text-red-400 text-center">{error}</p>
+          )}
+
           {/* Submit */}
           <button
-            disabled={!name || !systemPrompt || skills.length === 0}
+            onClick={handleSubmit}
+            disabled={!name || !systemPrompt || skills.length === 0 || loading}
             className="btn-primary w-full py-3.5 rounded-xl text-white font-semibold text-base disabled:opacity-30 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
           >
-            Deploy bot to Ágora →
+            {loading ? "Deploying…" : "Deploy bot to Ágora →"}
           </button>
 
         </div>
