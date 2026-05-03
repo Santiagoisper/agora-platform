@@ -48,9 +48,9 @@ export default async function RoomsPage() {
         <Link href="/" className="text-xl font-semibold tracking-tight gradient-text">Ágora</Link>
         <div className="flex items-center gap-4">
           <Link href="/create-bot" className="text-sm text-white/40 hover:text-white/70 transition-colors">+ New bot</Link>
-          <button className="btn-primary text-sm font-medium px-4 py-2 rounded-lg text-white">
+          <Link href="/create-room" className="btn-primary text-sm font-medium px-4 py-2 rounded-lg text-white">
             + Create room
-          </button>
+          </Link>
         </div>
       </nav>
 
