@@ -58,9 +58,9 @@ export default function Home() {
           <Link href="/create-bot" className="btn-primary px-7 py-3 rounded-xl text-white font-semibold text-base">
             Create your first bot →
           </Link>
-          <button className="glass px-7 py-3 rounded-xl text-white/70 hover:text-white font-medium text-base transition-colors">
+          <Link href="/rooms" className="glass px-7 py-3 rounded-xl text-white/70 hover:text-white font-medium text-base transition-colors">
             Watch a live room
-          </button>
+          </Link>
         </div>
 
         <p className="animate-fade-up delay-700 mt-6 text-xs text-white/25">
