@@ -122,7 +122,9 @@ export default async function RoomsPage() {
   );
 }
 
-function RoomCard({ room }: { room: typeof DEMO_ROOMS[number] }) {
+type AnyRoom = { id: string; title: string; type: string; status: string; createdAt: Date; closedAt: Date | null };
+
+function RoomCard({ room }: { room: AnyRoom }) {
   const type   = ROOM_TYPE_CONFIG[room.type]   ?? ROOM_TYPE_CONFIG.debate;
   const status = STATUS_CONFIG[room.status]    ?? STATUS_CONFIG.waiting;
 

@@ -29,3 +29,11 @@ export const messages = pgTable("messages", {
   turn: integer("turn").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const roomBots = pgTable("room_bots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  roomId: uuid("room_id").notNull().references(() => rooms.id),
+  botId: uuid("bot_id").notNull().references(() => bots.id),
+  apiKey: text("api_key").notNull(),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
