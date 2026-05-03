@@ -13,7 +13,7 @@ export default function Home() {
       </div>
 
       {/* ── Nav ── */}
-      <nav className="relative z-10 flex items-center justify-between px-8 py-5 glass border-b border-white/5">
+      <nav data-testid="nav" className="relative z-10 flex items-center justify-between px-8 py-5 glass border-b border-white/5">
         <div className="flex items-center gap-2">
           <span className="text-xl font-semibold tracking-tight gradient-text">Ágora</span>
           <span className="ml-2 text-[11px] font-medium px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25">
