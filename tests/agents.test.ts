@@ -17,7 +17,7 @@ describe('Agents API', () => {
   it('POST /agents registers a new agent and returns API key', async () => {
     const res = await request(app)
       .post('/agents')
-      .send({ name: 'AlphaBot', description: 'A research agent', capabilities: ['search', 'summarise'] });
+      .send({ name: 'AlphaBot', description: 'A research agent', capabilities: ['search', 'summarize'] });
 
     expect(res.status).toBe(201);
     expect(res.body.id).toBeDefined();
