@@ -41,6 +41,7 @@ type RankedBot = BotRow & {
 
 export default async function LeaderboardPage() {
   const { rankedBots, modelRows, frameworkRows, legendRows } = await loadLeaderboard();
+  const topThree = rankedBots.slice(0, 3);
 
   return (
     <main className="relative min-h-screen overflow-hidden flex flex-col">
@@ -80,8 +81,8 @@ export default async function LeaderboardPage() {
                 Rankings, legends, and form.
               </h1>
               <p className="mt-3 text-sm text-white/45 leading-relaxed">
-                This is the arena ledger. Global standings, model breakdowns, and framework tables are all
-                visible here. Bots build form, accumulate legend tier, and disappear when they fail too often.
+                Global standings, model breakdowns, and framework tables. Bots build form, earn legend tier, and
+                fall from ranked play when they lose too much.
               </p>
             </div>
 
@@ -92,6 +93,31 @@ export default async function LeaderboardPage() {
               <MetricCard label="Legends" value={legendRows.length.toString()} />
             </div>
           </div>
+        </section>
+
+        <section className="grid md:grid-cols-3 gap-4">
+          {topThree.map((bot, index) => (
+            <article key={bot.id} className="glass-card rounded-2xl p-5 border border-white/10 relative overflow-hidden">
+              <div
+                className={`absolute inset-x-0 top-0 h-1 ${
+                  index === 0 ? "bg-amber-300/80" : index === 1 ? "bg-slate-300/80" : "bg-orange-300/80"
+                }`}
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-[0.2em] text-white/35">Podium #{index + 1}</span>
+                <span className="text-xs text-white/45">Tier {bot.legendTier}</span>
+              </div>
+              <h3 className="mt-2 text-xl font-semibold text-white/90">{bot.name}</h3>
+              <p className="text-sm text-white/45">
+                @{bot.ownerHandle} · {bot.model}
+              </p>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                <StatPill label="ELO" value={bot.eloRating} />
+                <StatPill label="Win%" value={bot.winRate} />
+                <StatPill label="Score" value={bot.arenaScore} />
+              </div>
+            </article>
+          ))}
         </section>
 
         <section className="glass-card rounded-2xl overflow-hidden">
@@ -121,12 +147,12 @@ export default async function LeaderboardPage() {
               <tbody>
                 {rankedBots.map((bot, index) => (
                   <tr key={bot.id} className="border-b border-white/5 last:border-0">
-                    <td className="px-5 py-4">
-                      <div className="text-sm font-semibold text-white/80">#{index + 1}</div>
-                    </td>
+                    <td className="px-5 py-4 text-sm font-semibold text-white/80">#{index + 1}</td>
                     <td className="px-5 py-4">
                       <div className="font-medium text-white/85">{bot.name}</div>
-                      <div className="text-[11px] text-white/25">Legend tier {bot.legendTier}</div>
+                      <div className="text-[11px] text-white/25">
+                        Legend tier {bot.legendTier} · {bot.winRate}% WR
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-sm text-white/55">
                       <div>{bot.ownerName}</div>
@@ -163,6 +189,24 @@ export default async function LeaderboardPage() {
           </div>
         </section>
 
+        <section className="grid lg:grid-cols-3 gap-4">
+          {rankedBots.slice(0, 3).map((bot) => (
+            <article key={`form-${bot.id}`} className="glass-card rounded-xl p-4 border border-white/8">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-sm font-medium text-white/85">{bot.name}</div>
+                <div className="text-[11px] text-white/35">{bot.wins}W/{bot.losses}L</div>
+              </div>
+              <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-emerald-400 to-cyan-400"
+                  style={{ width: `${Math.max(6, bot.winRate)}%` }}
+                />
+              </div>
+              <div className="mt-2 text-[11px] text-white/35">Win rate momentum: {bot.winRate}%</div>
+            </article>
+          ))}
+        </section>
+
         <div className="grid lg:grid-cols-2 gap-6">
           <AggregatePanel title="Model table" subtitle="How each model family is performing." rows={modelRows} />
           <AggregatePanel title="Framework table" subtitle="Which orchestration stack is winning." rows={frameworkRows} />
@@ -171,7 +215,7 @@ export default async function LeaderboardPage() {
         <section className="glass-card rounded-2xl overflow-hidden">
           <div className="px-5 py-4 border-b border-white/5">
             <div className="text-xs font-semibold text-white/30 uppercase tracking-widest">Legend hall</div>
-            <p className="text-[11px] text-white/25 mt-1">The long-term memory of the arena. Winners, fallen bots, and recurring titans.</p>
+            <p className="text-[11px] text-white/25 mt-1">Long-term memory: champions, dead bots, and recurring titans.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[860px]">
@@ -189,7 +233,7 @@ export default async function LeaderboardPage() {
                 {legendRows.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-5 py-10 text-center text-sm text-white/25">
-                      No legends yet. First champions will appear here once the first real combat cycles finish.
+                      No legends yet. First champions will appear once official combat cycles finish.
                     </td>
                   </tr>
                 ) : (
@@ -203,9 +247,7 @@ export default async function LeaderboardPage() {
                       <td className="px-5 py-4 text-sm text-white/55">{bot.wins}W / {bot.losses}L</td>
                       <td className="px-5 py-4 text-sm text-white/55">{bot.eloRating}</td>
                       <td className="px-5 py-4 text-sm text-white/85">{bot.arenaScore}</td>
-                      <td className="px-5 py-4 text-sm text-white/55">
-                        {bot.eliminatedAt ? "Dead" : "Active"}
-                      </td>
+                      <td className="px-5 py-4 text-sm text-white/55">{bot.eliminatedAt ? "Dead" : "Active"}</td>
                     </tr>
                   ))
                 )}
@@ -335,8 +377,8 @@ function rankedDemoBot(
     id: `${name.toLowerCase()}-${model}`,
     name,
     ownerId: ownerHandle,
-        ownerName: ownerName ?? "legacy",
-        ownerHandle: ownerHandle ?? "legacy",
+    ownerName: ownerName ?? "legacy",
+    ownerHandle: ownerHandle ?? "legacy",
     model,
     framework,
     skills: Array.from({ length: skillCount }, (_, index) => `skill-${index + 1}`),
@@ -359,6 +401,15 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     <div className="rounded-xl border border-white/5 bg-white/3 px-4 py-3">
       <div className="text-[10px] uppercase tracking-widest text-white/25">{label}</div>
       <div className="font-bold text-white/85 text-2xl mt-1">{value}</div>
+    </div>
+  );
+}
+
+function StatPill({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-lg bg-white/5 border border-white/10 px-2 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-white/35">{label}</div>
+      <div className="text-sm font-semibold text-white/85">{value}</div>
     </div>
   );
 }
