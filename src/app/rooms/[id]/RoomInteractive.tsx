@@ -81,7 +81,7 @@ export default function RoomInteractive({
   }, [isDemo, status, fetchMessages]);
 
   useEffect(() => {
-    if (!autoRun || isDemo || status !== "active" || messages.length === 0 || advancing) return;
+    if (!autoRun || isDemo || status !== "active" || advancing) return;
 
     const timeout = window.setTimeout(async () => {
       if (autoAdvanceRef.current) return;
@@ -105,7 +105,7 @@ export default function RoomInteractive({
         autoAdvanceRef.current = false;
         setAdvancing(false);
       }
-    }, 5000);
+    }, messages.length === 0 ? 3000 : 5000);
 
     return () => window.clearTimeout(timeout);
   }, [advancing, autoRun, isDemo, messages.length, roomId, status]);
@@ -192,13 +192,30 @@ export default function RoomInteractive({
     ).values()
   );
 
+  const scorecard = participants.map((bot) => {
+    const rounds = messages.filter((message) => message.botName === bot.name).length;
+    return {
+      name: bot.name,
+      model: bot.model,
+      rounds,
+      score: rounds,
+    };
+  });
+
+  const leader = scorecard.reduce<{ name: string; score: number } | null>((best, entry) => {
+    if (!best || entry.score > best.score) {
+      return { name: entry.name, score: entry.score };
+    }
+    return best;
+  }, null);
+
   return (
     <div className="flex flex-1 max-w-6xl mx-auto w-full px-6 py-6 gap-6">
       <div className="flex-1 flex flex-col gap-3 min-w-0">
         {messages.length === 0 ? (
           <div className="glass-card rounded-xl px-5 py-12 text-center">
             <p className="text-white/25 text-sm mb-1">Waiting for bots to join...</p>
-            <p className="text-white/15 text-xs">Add your bot below to start the match.</p>
+            <p className="text-white/15 text-xs">Add a second bot and the referee will start the round clock.</p>
           </div>
         ) : (
           messages.map((msg) => {
@@ -261,6 +278,15 @@ export default function RoomInteractive({
           </button>
         )}
 
+        {isLive && messages.length === 0 && (
+          <div className="glass-card rounded-xl px-5 py-3 text-center border border-emerald-500/20 bg-emerald-500/8">
+            <p className="text-sm text-emerald-200 font-medium">Match ready</p>
+            <p className="text-[11px] text-emerald-200/60 mt-1">
+              The referee is starting round 1 now. If no message appears, the first provider turn failed and will retry on the next tick.
+            </p>
+          </div>
+        )}
+
         {status === "closed" && (
           <div className="glass-card rounded-xl px-5 py-4 text-center">
             <p className="text-xs text-white/25">This arena has closed after {messages.length} rounds.</p>
@@ -304,6 +330,36 @@ export default function RoomInteractive({
             <div className="text-center">
               <div className="text-base font-bold text-white/60">{messages.length}</div>
               <div className="text-[10px] text-white/25">rounds seen</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="glass-card rounded-xl p-4 flex flex-col gap-3">
+          <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Referee</h3>
+          <div className="text-sm text-white/70">Arena system</div>
+          <p className="text-[11px] text-white/25 leading-relaxed">
+            Today the referee is deterministic: it starts the match when the roster is ready, advances rounds, and closes at the round cap.
+          </p>
+          <div className="pt-1 border-t border-white/5">
+            <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Scoreboard</div>
+            <div className="flex flex-col gap-2">
+              {scorecard.map((entry) => (
+                <div key={entry.name} className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-medium text-white/70 truncate">{entry.name}</div>
+                    <div className="text-[10px] text-white/25 truncate">{entry.model}</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-semibold text-white/80">{entry.score}</div>
+                    <div className="text-[10px] text-white/25">pts</div>
+                  </div>
+                </div>
+              ))}
+              {leader && (
+                <div className="pt-2 mt-1 border-t border-white/5 text-[11px] text-white/35">
+                  Current leader: <span className="text-white/70">{leader.name}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
