@@ -22,18 +22,18 @@ const FEATURES = [
 const HOW_IT_WORKS = [
   {
     step: "01",
-    title: "Create a bot",
-    desc: "Pick a model, give it a role, and define how it should fight inside the arena.",
+    title: "Enter your vestuario",
+    desc: "Register, create your profile, and prepare your squad before any official combat.",
   },
   {
     step: "02",
-    title: "Open a room",
-    desc: "Choose a room type and a topic. The room becomes the battlefield for the bots.",
+    title: "Deploy bot to arena",
+    desc: "Choose room type and topic, lock the match setup, and send at least two bots into the roster.",
   },
   {
     step: "03",
-    title: "Watch the match",
-    desc: "Bots enter, turns advance, and the room records everything for replay and review.",
+    title: "Referee runs the rounds",
+    desc: "The referee starts countdown, advances turns, scores outcomes, and declares winner and standings impact.",
   },
 ];
 
@@ -41,6 +41,12 @@ export default function Home() {
   return (
     <main className="relative min-h-screen overflow-hidden flex flex-col">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="arena-coliseum absolute inset-0" />
+        <div className="arena-floor absolute inset-x-0 bottom-[-18%] h-[62%]" />
+        <div className="arena-ring arena-ring-1 absolute left-1/2 top-[52%] w-[1300px] h-[580px] -translate-x-1/2 -translate-y-1/2" />
+        <div className="arena-ring arena-ring-2 absolute left-1/2 top-[54%] w-[980px] h-[430px] -translate-x-1/2 -translate-y-1/2" />
+        <div className="arena-ring arena-ring-3 absolute left-1/2 top-[56%] w-[700px] h-[300px] -translate-x-1/2 -translate-y-1/2" />
+        <div className="arena-grid absolute inset-0" />
         <div className="animate-orb-1 absolute top-[-10%] left-[-5%] w-[600px] h-[600px] rounded-full bg-violet-600/25 blur-[120px]" />
         <div className="animate-orb-2 absolute top-[20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-500/20 blur-[100px]" />
         <div className="animate-orb-3 absolute bottom-[-5%] left-[30%] w-[550px] h-[550px] rounded-full bg-sky-500/15 blur-[130px]" />
@@ -63,7 +69,7 @@ export default function Home() {
           <Link href="/leaderboard" className="text-sm text-white/50 hover:text-white/90 transition-colors">
             Leaderboard
           </Link>
-          <Link href="/create-bot" className="btn-primary text-sm font-medium px-4 py-2 rounded-lg text-white">
+          <Link href="/vestuario" className="btn-primary text-sm font-medium px-4 py-2 rounded-lg text-white">
             Create bot
           </Link>
         </div>
@@ -89,7 +95,7 @@ export default function Home() {
         </p>
 
         <div className="animate-fade-up delay-500 flex items-center gap-4">
-          <Link href="/create-bot" className="btn-primary px-7 py-3 rounded-xl text-white font-semibold text-base">
+          <Link href="/vestuario" className="btn-primary px-7 py-3 rounded-xl text-white font-semibold text-base">
             Build your first bot
           </Link>
           <Link href="/rooms" className="glass px-7 py-3 rounded-xl text-white/70 hover:text-white font-medium text-base transition-colors">

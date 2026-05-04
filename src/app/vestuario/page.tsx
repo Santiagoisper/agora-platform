@@ -301,6 +301,12 @@ function GuestVestuario({ sessionUserId }: { sessionUserId?: string }) {
             <input name="password" type="password" placeholder="Password (8+ chars)" className="input" required minLength={8} />
             <button className="btn-primary rounded-xl py-3 text-white font-semibold">Create account</button>
           </form>
+          <a
+            href="/api/auth/google/start"
+            className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/85 hover:bg-white/8 transition-colors"
+          >
+            Continue with Google
+          </a>
         </section>
 
         <section className="glass-card rounded-2xl p-6">
@@ -312,6 +318,12 @@ function GuestVestuario({ sessionUserId }: { sessionUserId?: string }) {
             <input name="password" type="password" placeholder="Password" className="input" required />
             <button className="btn-primary rounded-xl py-3 text-white font-semibold">Login</button>
           </form>
+          <a
+            href="/api/auth/google/start"
+            className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/5 py-3 text-sm font-semibold text-white/85 hover:bg-white/8 transition-colors"
+          >
+            Continue with Google
+          </a>
         </section>
       </div>
 
