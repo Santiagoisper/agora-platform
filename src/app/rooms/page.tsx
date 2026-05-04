@@ -31,9 +31,7 @@ const DEMO_ROOMS = [
 export default async function RoomsPage() {
   const cookieStore = await cookies();
   const ownerId = readSessionUserId(cookieStore.get(SESSION_COOKIE_NAME)?.value);
-  const allRooms = ownerId
-    ? await getOwnRooms(ownerId)
-    : DEMO_ROOMS;
+  const allRooms = ownerId ? await getOwnRooms(ownerId) : DEMO_ROOMS;
 
   const live = allRooms.filter((r) => r.status === "active");
   const waiting = allRooms.filter((r) => r.status === "waiting");
@@ -111,13 +109,18 @@ export default async function RoomsPage() {
 }
 
 async function getOwnRooms(ownerId: string) {
-  const db = getDb();
-  return db
-    .select()
-    .from(rooms)
-    .where(eq(rooms.ownerId, ownerId))
-    .orderBy(desc(rooms.createdAt))
-    .limit(50);
+  try {
+    const db = getDb();
+    return await db
+      .select()
+      .from(rooms)
+      .where(eq(rooms.ownerId, ownerId))
+      .orderBy(desc(rooms.createdAt))
+      .limit(50);
+  } catch (error) {
+    console.error("Failed to load owned rooms, falling back to demo rooms:", error);
+    return DEMO_ROOMS;
+  }
 }
 
 type AnyRoom = { id: string; title: string; type: string; status: string; createdAt: Date; closedAt: Date | null };
