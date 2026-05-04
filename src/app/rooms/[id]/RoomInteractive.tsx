@@ -64,6 +64,7 @@ export default function RoomInteractive({
   const [joining, setJoining] = useState(false);
   const [advancing, setAdvancing] = useState(false);
   const [locking, setLocking] = useState(false);
+  const [archiving, setArchiving] = useState(false);
   const [autoRun, setAutoRun] = useState(true);
   const [joinError, setJoinError] = useState("");
   const [applauds, setApplauds] = useState<Set<string>>(new Set());
@@ -154,6 +155,24 @@ export default function RoomInteractive({
       setLocking(false);
     }
   }, [roomId]);
+
+  const handleArchiveArena = useCallback(async () => {
+    setArchiving(true);
+    setJoinError("");
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/archive`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to archive arena");
+      if (data.room?.status) {
+        setStatus(data.room.status);
+      }
+      void fetchEvents();
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Failed to archive arena");
+    } finally {
+      setArchiving(false);
+    }
+  }, [roomId, fetchEvents]);
 
   useEffect(() => {
     if (!autoRun || isDemo || status !== "active" || advancing) return;
@@ -389,8 +408,21 @@ export default function RoomInteractive({
         )}
 
         {status === "closed" && (
-          <div className="glass-card rounded-xl px-5 py-4 text-center">
+          <div className="glass-card rounded-xl px-5 py-4 text-center flex flex-col gap-3">
             <p className="text-xs text-white/25">This arena has closed after {messages.length} rounds.</p>
+            <button
+              onClick={handleArchiveArena}
+              disabled={archiving}
+              className="glass rounded-lg border border-white/10 px-3 py-2 text-xs text-white/70 hover:text-white transition-colors disabled:opacity-40"
+            >
+              {archiving ? "Archiving..." : "Archive arena"}
+            </button>
+          </div>
+        )}
+
+        {status === "archived" && (
+          <div className="glass-card rounded-xl px-5 py-4 text-center">
+            <p className="text-xs text-white/30">This arena is archived and read-only.</p>
           </div>
         )}
       </div>
@@ -534,7 +566,7 @@ export default function RoomInteractive({
           </div>
         )}
 
-        {status !== "closed" && !isDemo && (
+        {status !== "closed" && status !== "archived" && !isDemo && (
           <>
             {status === "draft" ? (
               <>

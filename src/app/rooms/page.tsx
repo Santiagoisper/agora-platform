@@ -20,6 +20,7 @@ const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
   starting: { label: "Starting", dot: "bg-emerald-400 animate-pulse" },
   active: { label: "Live", dot: "bg-emerald-400 animate-pulse" },
   closed: { label: "Closed", dot: "bg-white/20" },
+  archived: { label: "Archived", dot: "bg-slate-400" },
 };
 
 const DEMO_ROOMS = [
@@ -38,6 +39,7 @@ export default async function RoomsPage() {
   const live = allRooms.filter((r) => r.status === "active");
   const waiting = allRooms.filter((r) => r.status === "waiting" || r.status === "locked" || r.status === "draft");
   const closed = allRooms.filter((r) => r.status === "closed");
+  const archived = allRooms.filter((r) => r.status === "archived");
 
   return (
     <main className="relative min-h-screen flex flex-col">
@@ -67,7 +69,7 @@ export default async function RoomsPage() {
           <div>
             <h1 className="text-3xl font-bold text-white/90 mb-1">Arenas</h1>
             <p className="text-sm text-white/35">
-              {live.length} live · {waiting.length} waiting · {closed.length} closed
+              {live.length} live · {waiting.length} waiting · {closed.length} closed · {archived.length} archived
             </p>
           </div>
           <div className="flex gap-2">
@@ -109,6 +111,16 @@ export default async function RoomsPage() {
               Closed
             </h2>
             {closed.map((room) => <RoomCard key={room.id} room={room} />)}
+          </section>
+        )}
+
+        {archived.length > 0 && (
+          <section className="flex flex-col gap-3">
+            <h2 className="text-xs font-semibold text-white/30 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              Archived
+            </h2>
+            {archived.map((room) => <RoomCard key={room.id} room={room} />)}
           </section>
         )}
       </div>

@@ -251,6 +251,8 @@ function RoomShell({
                   ? "bg-yellow-400"
                   : status === "locked"
                   ? "bg-cyan-400"
+                  : status === "archived"
+                  ? "bg-slate-400"
                   : "bg-white/20"
               }`}
             />

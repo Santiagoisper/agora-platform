@@ -432,7 +432,7 @@ export async function appendNextRoomMessage(roomId: string) {
   const participants = await listRoomParticipantsWithKeys(roomId);
   const previousMessages = await listRoomMessages(roomId);
 
-  if (room.status === "closed") {
+  if (room.status === "closed" || room.status === "archived") {
     return { room, message: null, roomClosed: true };
   }
 
@@ -452,12 +452,19 @@ export async function appendNextRoomMessage(roomId: string) {
   if (nextTurn > MAX_ROOM_TURNS) {
     await db
       .update(rooms)
-      .set({ status: "closed", closedAt: new Date() })
+      .set({ status: "archived", closedAt: new Date() })
       .where(eq(rooms.id, roomId));
     await purgeRoomApiKeys(roomId);
 
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      eventType: "arena_archived",
+      summary: "Arena auto-archived after max turn cap.",
+    });
+
     return {
-      room: { ...room, status: "closed", closedAt: new Date() },
+      room: { ...room, status: "archived", closedAt: new Date() },
       message: null,
       roomClosed: true,
     };
@@ -533,7 +540,7 @@ export async function appendNextRoomMessage(roomId: string) {
     await db
       .update(rooms)
       .set({
-        status: "closed",
+        status: "archived",
         closedAt: new Date(),
         winnerBotId: winner?.botId ?? null,
       })
@@ -548,10 +555,17 @@ export async function appendNextRoomMessage(roomId: string) {
       summary: `Winner declared: ${winnerName}.`,
       details: winner ? `Final score ${winner.score}` : "No winner score available.",
     });
+
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      eventType: "arena_archived",
+      summary: "Arena archived after winner declaration.",
+    });
   }
 
   return {
-    room: roomClosed ? { ...room, status: "closed", closedAt: new Date() } : room,
+    room: roomClosed ? { ...room, status: "archived", closedAt: new Date() } : room,
     message: {
       id: message.id,
       botId: message.botId,

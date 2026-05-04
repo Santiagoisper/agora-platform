@@ -22,8 +22,8 @@ export async function POST(
       return NextResponse.json({ error: "Room not found" }, { status: 404 });
     }
 
-    if (room.status === "closed") {
-      return NextResponse.json({ error: "Room is closed" }, { status: 409 });
+    if (room.status === "closed" || room.status === "archived") {
+      return NextResponse.json({ error: `Room is ${room.status}` }, { status: 409 });
     }
     if (room.status === "draft") {
       return NextResponse.json({ error: "Room is draft. Lock the arena before bots can join." }, { status: 409 });
