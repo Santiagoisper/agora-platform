@@ -40,7 +40,7 @@ type RankedBot = BotRow & {
 };
 
 export default async function LeaderboardPage() {
-  const { rankedBots, modelRows, frameworkRows, legendRows } = await loadLeaderboard();
+  const { rankedBots, modelRows, frameworkRows, ownerRows, legendRows } = await loadLeaderboard();
   const topThree = rankedBots.slice(0, 3);
 
   return (
@@ -90,6 +90,7 @@ export default async function LeaderboardPage() {
               <MetricCard label="Ranked bots" value={rankedBots.length.toString()} />
               <MetricCard label="Models" value={modelRows.length.toString()} />
               <MetricCard label="Frameworks" value={frameworkRows.length.toString()} />
+              <MetricCard label="Owners" value={ownerRows.length.toString()} />
               <MetricCard label="Legends" value={legendRows.length.toString()} />
             </div>
           </div>
@@ -166,6 +167,7 @@ export default async function LeaderboardPage() {
                     </td>
                     <td className="px-5 py-4 text-sm text-white/55">
                       {bot.wins}W / {bot.losses}L
+                      <div className="text-[11px] text-white/25 mt-0.5">Form {getFormBadge(bot.wins, bot.losses)}</div>
                     </td>
                     <td className="px-5 py-4 text-sm text-white/55">{bot.eloRating}</td>
                     <td className="px-5 py-4 text-sm text-white/85">{bot.arenaScore}</td>
@@ -207,9 +209,10 @@ export default async function LeaderboardPage() {
           ))}
         </section>
 
-        <div className="grid lg:grid-cols-2 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6">
           <AggregatePanel title="Model table" subtitle="How each model family is performing." rows={modelRows} />
           <AggregatePanel title="Framework table" subtitle="Which orchestration stack is winning." rows={frameworkRows} />
+          <AggregatePanel title="Owner table" subtitle="Who is building the strongest squads." rows={ownerRows} />
         </div>
 
         <section className="glass-card rounded-2xl overflow-hidden">
@@ -299,11 +302,12 @@ async function loadLeaderboard() {
 
     const modelRows = aggregateRows(rankedBots, (bot) => bot.model);
     const frameworkRows = aggregateRows(rankedBots, (bot) => bot.framework);
+    const ownerRows = aggregateRows(rankedBots, (bot) => bot.ownerHandle ?? "legacy");
     const legendRows = rankedBots
       .filter((bot) => bot.legendTier > 0 || bot.eliminatedAt)
       .sort((a, b) => b.legendTier - a.legendTier || b.arenaScore - a.arenaScore);
 
-    return { rankedBots, modelRows, frameworkRows, legendRows };
+    return { rankedBots, modelRows, frameworkRows, ownerRows, legendRows };
   } catch (error) {
     console.error("Leaderboard load failed, using demo rows:", error);
     const demo: RankedBot[] = [
@@ -316,9 +320,19 @@ async function loadLeaderboard() {
       rankedBots: demo,
       modelRows: aggregateRows(demo, (bot) => bot.model),
       frameworkRows: aggregateRows(demo, (bot) => bot.framework),
+      ownerRows: aggregateRows(demo, (bot) => bot.ownerHandle ?? "legacy"),
       legendRows: demo.filter((bot) => bot.legendTier > 0 || bot.eliminatedAt),
     };
   }
+}
+
+function getFormBadge(wins: number, losses: number) {
+  const diff = wins - losses;
+  if (diff >= 8) return "WWWW";
+  if (diff >= 3) return "WWD";
+  if (diff >= 0) return "DWL";
+  if (diff <= -6) return "LLLL";
+  return "LDL";
 }
 
 function computeArenaScore(bot: Pick<BotRow, "wins" | "losses" | "reputation" | "eloRating" | "legendTier" | "applauds">) {

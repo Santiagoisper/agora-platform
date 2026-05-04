@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const BOT_COLORS = [
   "from-violet-500 to-indigo-600",
@@ -65,13 +65,11 @@ export default function RoomInteractive({
   const [advancing, setAdvancing] = useState(false);
   const [locking, setLocking] = useState(false);
   const [archiving, setArchiving] = useState(false);
-  const [autoRun, setAutoRun] = useState(true);
   const [joinError, setJoinError] = useState("");
   const [applauds, setApplauds] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<MatchEvent[]>([]);
   const [eventFilter, setEventFilter] = useState<"all" | "score" | "risk">("all");
   const [clockNow, setClockNow] = useState(() => Date.now());
-  const autoAdvanceRef = useRef(false);
 
   const botColorMap = new Map(initialBots.map((b, i) => [b.name, BOT_COLORS[i % BOT_COLORS.length]]));
 
@@ -103,14 +101,29 @@ export default function RoomInteractive({
     }
   }, [roomId]);
 
+  const fetchRoomState = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/state`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data?.room) {
+        setStatus(data.room.status);
+        setStartsAt(data.room.startsAt ?? null);
+      }
+    } catch {
+      // silent
+    }
+  }, [roomId]);
+
   useEffect(() => {
-    if (isDemo || status !== "active") return;
+    if (isDemo || status === "closed" || status === "archived") return;
     const interval = setInterval(() => {
+      void fetchRoomState();
       void fetchMessages();
       void fetchEvents();
     }, 4000);
     return () => clearInterval(interval);
-  }, [isDemo, status, fetchMessages, fetchEvents]);
+  }, [isDemo, status, fetchMessages, fetchEvents, fetchRoomState]);
 
   useEffect(() => {
     if (isDemo) return;
@@ -174,37 +187,6 @@ export default function RoomInteractive({
       setArchiving(false);
     }
   }, [roomId, fetchEvents]);
-
-  useEffect(() => {
-    if (!autoRun || isDemo || status !== "active" || advancing) return;
-
-    const timeout = window.setTimeout(async () => {
-      if (autoAdvanceRef.current) return;
-
-      autoAdvanceRef.current = true;
-      setAdvancing(true);
-
-      try {
-        const res = await fetch(`/api/rooms/${roomId}/turn`, { method: "POST" });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to advance turn");
-        if (data.message) {
-          setMessages((prev) => [...prev, data.message]);
-        }
-        void fetchEvents();
-        if (data.roomClosed) {
-          setStatus("closed");
-        }
-      } catch (err) {
-        console.error("Auto-turn error:", err);
-      } finally {
-        autoAdvanceRef.current = false;
-        setAdvancing(false);
-      }
-    }, messages.length === 0 ? 3000 : 5000);
-
-    return () => window.clearTimeout(timeout);
-  }, [advancing, autoRun, isDemo, messages.length, roomId, status, fetchEvents]);
 
   useEffect(() => {
     if (!showJoin || isDemo) return;
@@ -312,18 +294,6 @@ export default function RoomInteractive({
     };
   }, [isDemo, startsAt, status]);
 
-  useEffect(() => {
-    if (isDemo || status !== "starting" || countdownMs === null || countdownMs > 0 || advancing) {
-      return;
-    }
-
-    const startRound = window.setTimeout(() => {
-      void handleNextTurn();
-    }, 0);
-
-    return () => window.clearTimeout(startRound);
-  }, [advancing, countdownMs, handleNextTurn, isDemo, status]);
-
   return (
     <div className="flex flex-1 max-w-6xl mx-auto w-full px-6 py-6 gap-6">
       <div className="flex-1 flex flex-col gap-3 min-w-0">
@@ -400,7 +370,7 @@ export default function RoomInteractive({
             onClick={handleNextTurn}
             className="glass-card rounded-xl px-5 py-3 text-sm text-white/40 hover:text-white/70 hover:border-white/16 transition-colors text-center w-full"
           >
-            Advance round &rarr;
+            Force next round &rarr;
           </button>
         )}
 
@@ -567,29 +537,6 @@ export default function RoomInteractive({
             </div>
           </div>
         </div>
-
-        {!isDemo && (
-          <div className="glass-card rounded-xl p-4 flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Autopilot</h3>
-                <p className="text-[10px] text-white/25 mt-1">
-                  Advances rounds automatically while this page stays open.
-                </p>
-              </div>
-              <button
-                onClick={() => setAutoRun((prev) => !prev)}
-                className={`rounded-full px-3 py-1 text-[10px] font-medium border transition-colors ${
-                  autoRun
-                    ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
-                    : "border-white/10 bg-white/5 text-white/40"
-                }`}
-              >
-                {autoRun ? "On" : "Off"}
-              </button>
-            </div>
-          </div>
-        )}
 
         {status !== "closed" && status !== "archived" && !isDemo && (
           <>

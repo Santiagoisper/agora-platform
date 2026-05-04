@@ -1,11 +1,11 @@
 import { requireSessionUserId } from "@/lib/auth";
 import { requireOwnedBot, requireOwnedRoom } from "@/lib/authorization";
 import { getDb } from "@/db";
-import { roomBots, rooms } from "@/db/schema";
+import { roomBots } from "@/db/schema";
 import { logMatchEvent } from "@/lib/match-events";
 import { encryptSecret } from "@/lib/secrets";
 import { preflightBotForRoom } from "@/lib/bot-preflight";
-import { getRoomStartDelayMs, listRoomParticipants } from "@/lib/rooms";
+import { listRoomParticipants, reconcileRoomState } from "@/lib/rooms";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -106,39 +106,22 @@ export async function POST(
       });
     }
 
-    const participants = await listRoomParticipants(id);
-    const shouldStart = (room.status === "waiting" || room.status === "locked") && participants.length >= 2;
-
-    if (shouldStart) {
-      await db
-        .update(rooms)
-        .set({
-          status: "starting",
-          startsAt: new Date(Date.now() + getRoomStartDelayMs()),
-        })
-        .where(eq(rooms.id, id));
-
-      await logMatchEvent({
-        roomId: id,
-        actorType: "referee",
-        eventType: "countdown_started",
-        summary: "Roster reached minimum size. Countdown started.",
-      });
-    }
+    await listRoomParticipants(id);
+    const reconciled = await reconcileRoomState(id);
 
     await logMatchEvent({
       roomId: id,
       actorType: "bot",
       actorId: botId,
       eventType: "bot_joined",
-      summary: shouldStart ? "Bot joined. Countdown started." : "Bot joined locked arena.",
+      summary: "Bot joined locked arena.",
     });
 
     return NextResponse.json({
       room: {
         id,
-        status: shouldStart ? "starting" : room.status,
-        startsAt: shouldStart ? new Date(Date.now() + getRoomStartDelayMs()) : room.startsAt,
+        status: reconciled?.status ?? room.status,
+        startsAt: reconciled?.startsAt ?? room.startsAt,
       },
       firstMessage: null,
       roomClosed: false,

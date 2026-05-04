@@ -5,19 +5,25 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
-export default async function VestuarioPage() {
+export default async function VestuarioPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ auth_error?: string }>;
+}) {
+  const query = await searchParams;
+  const authError = query.auth_error;
   const cookieStore = await cookies();
   const sessionUserId = readSessionUserId(cookieStore.get(SESSION_COOKIE_NAME)?.value);
 
   if (!sessionUserId) {
-    return <GuestVestuario />;
+    return <GuestVestuario authError={authError} />;
   }
 
   const db = getDb();
   const user = await db.query.users.findFirst({ where: eq(users.id, sessionUserId) });
 
   if (!user) {
-    return <GuestVestuario sessionUserId={sessionUserId} />;
+    return <GuestVestuario sessionUserId={sessionUserId} authError={authError} />;
   }
 
   const [myBots, myRooms] = await Promise.all([
@@ -262,7 +268,7 @@ export default async function VestuarioPage() {
   );
 }
 
-function GuestVestuario({ sessionUserId }: { sessionUserId?: string }) {
+function GuestVestuario({ sessionUserId, authError }: { sessionUserId?: string; authError?: string }) {
   return (
     <main className="relative min-h-screen overflow-hidden flex flex-col">
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -288,6 +294,12 @@ function GuestVestuario({ sessionUserId }: { sessionUserId?: string }) {
       </nav>
 
       <div className="relative z-10 px-6 py-10 max-w-6xl mx-auto w-full grid lg:grid-cols-2 gap-6">
+        {authError && (
+          <div className="lg:col-span-2 rounded-xl border border-amber-500/25 bg-amber-500/12 px-4 py-3 text-sm text-amber-100">
+            Google sign-in is not fully configured yet (`{authError}`). Ask admin to set `GOOGLE_CLIENT_ID`,
+            `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI` in Vercel.
+          </div>
+        )}
         <section className="glass-card rounded-2xl p-6">
           <div className="text-[11px] uppercase tracking-[0.3em] text-white/25 mb-2">Create account</div>
           <h1 className="text-3xl font-bold text-white/90 mb-3">Open your vestuario</h1>

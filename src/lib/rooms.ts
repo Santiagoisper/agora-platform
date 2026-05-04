@@ -27,6 +27,7 @@ export interface SerializedRoomMessage {
 }
 
 const MAX_ROOM_TURNS = 12;
+const ROOM_TURN_COOLDOWN_MS = 12000;
 const ROOM_START_DELAY_MS = 3000;
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
@@ -350,28 +351,6 @@ async function listRoomParticipantsWithKeys(roomId: string): Promise<RoomPartici
   }));
 }
 
-async function activateRoomIfDue(roomId: string) {
-  const db = getDb();
-  const room = await getRoomById(roomId);
-
-  if (!room || room.status !== "starting") {
-    return room;
-  }
-
-  const startsAt = room.startsAt ? new Date(room.startsAt).getTime() : null;
-  if (startsAt && Date.now() < startsAt) {
-    return room;
-  }
-
-  const [updated] = await db
-    .update(rooms)
-    .set({ status: "active", startsAt: null })
-    .where(eq(rooms.id, roomId))
-    .returning();
-
-  return updated ?? room;
-}
-
 async function purgeRoomApiKeys(roomId: string) {
   const db = getDb();
 
@@ -436,9 +415,107 @@ export async function getRoomRefereeState(roomId: string) {
   };
 }
 
+export async function reconcileRoomState(roomId: string) {
+  const db = getDb();
+  const room = await getRoomById(roomId);
+
+  if (!room || room.status === "closed" || room.status === "archived") {
+    return room;
+  }
+
+  const participants = await listRoomParticipants(roomId);
+
+  if ((room.status === "locked" || room.status === "waiting") && participants.length >= 2) {
+    const startsAt = new Date(Date.now() + ROOM_START_DELAY_MS);
+    const [updated] = await db
+      .update(rooms)
+      .set({ status: "starting", startsAt })
+      .where(eq(rooms.id, roomId))
+      .returning();
+
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      eventType: "countdown_started",
+      summary: "Roster reached minimum size. Countdown started.",
+    });
+
+    return updated ?? room;
+  }
+
+  if (room.status === "starting" && participants.length < 2) {
+    const [updated] = await db
+      .update(rooms)
+      .set({ status: "waiting", startsAt: null })
+      .where(eq(rooms.id, roomId))
+      .returning();
+
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      eventType: "countdown_cancelled",
+      severity: "warn",
+      summary: "Countdown cancelled due to insufficient bots.",
+    });
+
+    return updated ?? room;
+  }
+
+  if (room.status === "starting" && room.startsAt && Date.now() >= new Date(room.startsAt).getTime()) {
+    const [updated] = await db
+      .update(rooms)
+      .set({ status: "active", startsAt: null })
+      .where(eq(rooms.id, roomId))
+      .returning();
+
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      eventType: "round_started",
+      summary: "Countdown complete. Arena is now active.",
+    });
+
+    return updated ?? room;
+  }
+
+  return room;
+}
+
+export async function listProcessableRoomIds(limit = 32) {
+  const db = getDb();
+  const rows = await db
+    .select({ id: rooms.id })
+    .from(rooms)
+    .where(inArray(rooms.status, ["locked", "waiting", "starting", "active"]))
+    .limit(limit);
+
+  return rows.map((row) => row.id);
+}
+
+export async function runRefereeTick(limit = 32) {
+  const ids = await listProcessableRoomIds(limit);
+  let processed = 0;
+  let advanced = 0;
+
+  for (const roomId of ids) {
+    const room = await reconcileRoomState(roomId);
+    if (!room) continue;
+
+    processed += 1;
+    if (room.status !== "active") continue;
+
+    const result = await appendNextRoomMessage(roomId);
+    if (result.message || result.roomClosed) {
+      advanced += 1;
+    }
+  }
+
+  return { processed, advanced, rooms: ids.length };
+}
+
 export async function appendNextRoomMessage(roomId: string) {
   const db = getDb();
-  const room = await activateRoomIfDue(roomId);
+  const room = await reconcileRoomState(roomId);
 
   if (!room) {
     return { room: null, message: null, roomClosed: false };
@@ -463,6 +540,13 @@ export async function appendNextRoomMessage(roomId: string) {
   }
 
   const nextTurn = previousMessages.length + 1;
+  const lastMessage = previousMessages[previousMessages.length - 1];
+  if (lastMessage) {
+    const elapsed = Date.now() - new Date(lastMessage.createdAt).getTime();
+    if (elapsed < ROOM_TURN_COOLDOWN_MS) {
+      return { room, message: null, roomClosed: false };
+    }
+  }
 
   if (nextTurn > MAX_ROOM_TURNS) {
     await db
