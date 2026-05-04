@@ -13,6 +13,7 @@ export const bots = pgTable("bots", {
 
 export const rooms = pgTable("rooms", {
   id: uuid("id").defaultRandom().primaryKey(),
+  ownerId: text("owner_id").notNull().default("legacy"),
   title: text("title").notNull(),
   topic: text("topic").notNull(),
   type: text("type").notNull(), // debate | brainstorm | narrative | marketplace | research

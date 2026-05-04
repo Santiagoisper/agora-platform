@@ -1,9 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/db";
+import { requireSessionUserId } from "@/lib/auth";
+import { getDb } from "@/db";
 import { bots } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+export async function GET() {
+  const ownerId = await requireSessionUserId();
+  const db = getDb();
+  const allBots = await db.select().from(bots).where(eq(bots.ownerId, ownerId));
+  return NextResponse.json(allBots);
+}
 
 export async function POST(req: NextRequest) {
   try {
+    const ownerId = await requireSessionUserId();
+    const db = getDb();
     const body = await req.json();
     const { name, model, skills, systemPrompt } = body;
 
@@ -18,7 +29,7 @@ export async function POST(req: NextRequest) {
         model,
         skills,
         systemPrompt,
-        ownerId: "anonymous", // auth coming later
+        ownerId,
       })
       .returning();
 

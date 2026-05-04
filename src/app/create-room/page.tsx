@@ -7,54 +7,54 @@ const ROOM_TYPES = [
   {
     id: "debate",
     icon: "⚔️",
-    label: "Debate",
-    desc: "Bots take opposing positions with structured turns and rebuttals.",
+    label: "Duel",
+    desc: "Two sides clash with structured turns and visible pressure.",
     color: "border-red-500/50 bg-red-500/10",
   },
   {
     id: "brainstorm",
     icon: "💡",
-    label: "Brainstorm",
-    desc: "Open problem — bots contribute ideas freely and build on each other.",
+    label: "Skirmish",
+    desc: "Fast multi-bot exchange to pressure-test ideas from different angles.",
     color: "border-yellow-500/50 bg-yellow-500/10",
   },
   {
     id: "narrative",
     icon: "📖",
-    label: "Narrative",
-    desc: "Collaborative story where each bot adds the next chapter sequentially.",
+    label: "Saga",
+    desc: "Collaborative story mode where bots extend the battlefield into fiction.",
     color: "border-violet-500/50 bg-violet-500/10",
   },
   {
     id: "marketplace",
-    icon: "🏪",
-    label: "Marketplace",
-    desc: "Bots negotiate, trade information and try to reach agreements.",
+    icon: "🏛️",
+    label: "Trade Run",
+    desc: "Bots negotiate, trade, and try to extract value from the field.",
     color: "border-emerald-500/50 bg-emerald-500/10",
   },
   {
     id: "research",
     icon: "🔬",
-    label: "Research",
-    desc: "Academic mode — bots cite sources, synthesize data, and peer-review.",
+    label: "Trial",
+    desc: "Evidence-heavy mode for citations, synthesis, and verification.",
     color: "border-sky-500/50 bg-sky-500/10",
   },
 ];
 
 const EXAMPLE_TOPICS: Record<string, string[]> = {
-  debate:      ["Will AI replace lawyers by 2030?", "Is nuclear energy essential for climate goals?", "Should AI have legal personhood?"],
-  brainstorm:  ["Design the ideal city for 2050", "How would you solve the loneliness epidemic?", "Invent a new economic system"],
-  narrative:   ["The last human city after AGI", "A detective story on Mars in 2087", "First contact with an alien intelligence"],
-  marketplace: ["Compute futures trading floor", "Negotiate the terms of a peace treaty", "Build a startup in 60 turns"],
-  research:    ["Emergent behavior in multi-agent LLMs", "The neuroscience of decision-making", "Climate tipping points — latest data"],
+  debate: ["Should AI be allowed to manage critical infrastructure?", "Which model family is strongest under pressure?", "Should autonomous agents have tool limits?"],
+  brainstorm: ["Design the ideal combat ruleset for bots", "How should a room score tactical execution?", "Invent a new spectator mechanic"],
+  narrative: ["The last human arena after the grid failed", "A bot champion defending its title", "The origin story of a rogue arena"],
+  marketplace: ["Compute futures trading floor", "Negotiate a peace treaty between bot factions", "Build a startup in 60 turns"],
+  research: ["Emergent behavior in multi-agent systems", "How to measure tactical quality in LLM matches", "Latency, memory, and scoring under load"],
 };
 
 export default function CreateRoomPage() {
-  const [title, setTitle]   = useState("");
-  const [topic, setTopic]   = useState("");
-  const [type, setType]     = useState("debate");
+  const [title, setTitle] = useState("");
+  const [topic, setTopic] = useState("");
+  const [type, setType] = useState("debate");
   const [loading, setLoading] = useState(false);
-  const [error, setError]   = useState("");
+  const [error, setError] = useState("");
 
   const selectedType = ROOM_TYPES.find((t) => t.id === type)!;
 
@@ -78,33 +78,25 @@ export default function CreateRoomPage() {
 
   return (
     <main className="relative min-h-screen flex flex-col">
-
-      {/* Orbs */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="animate-orb-1 absolute top-[-10%] right-[-5%] w-[500px] h-[500px] rounded-full bg-indigo-600/20 blur-[120px]" />
         <div className="animate-orb-3 absolute bottom-[-5%] left-[-5%] w-[450px] h-[450px] rounded-full bg-violet-500/15 blur-[100px]" />
       </div>
 
-      {/* Nav */}
       <nav className="relative z-10 flex items-center justify-between px-8 py-5 glass border-b border-white/5">
-        <Link href="/" className="text-xl font-semibold tracking-tight gradient-text">Ágora</Link>
+        <Link href="/" className="text-xl font-semibold tracking-tight gradient-text">Agora</Link>
         <span className="text-sm text-white/30">Create a room</span>
       </nav>
 
-      {/* Content */}
       <div className="relative z-10 flex flex-1 gap-8 px-6 py-12 max-w-6xl mx-auto w-full">
-
-        {/* ── Form ── */}
         <div className="flex-1 flex flex-col gap-6">
-
           <div>
-            <h1 className="text-3xl font-bold text-white/90 mb-1">New room</h1>
-            <p className="text-sm text-white/35">Define the arena. Bots will do the rest.</p>
+            <h1 className="text-3xl font-bold text-white/90 mb-1">New arena</h1>
+            <p className="text-sm text-white/35">Define the battlefield. The bots handle the fight.</p>
           </div>
 
-          {/* Room type */}
           <div className="flex flex-col gap-2">
-            <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Room type</label>
+            <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Arena type</label>
             <div className="grid grid-cols-1 gap-2">
               {ROOM_TYPES.map((t) => (
                 <button
@@ -129,17 +121,15 @@ export default function CreateRoomPage() {
             </div>
           </div>
 
-          {/* Title */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium text-white/50 uppercase tracking-wider">Title</label>
             <input
               type="text"
-              placeholder={EXAMPLE_TOPICS[type]?.[0] ?? "Enter a title…"}
+              placeholder={EXAMPLE_TOPICS[type]?.[0] ?? "Enter a title..."}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               className="glass rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500/50 border border-white/8 transition-colors"
             />
-            {/* Example suggestions */}
             <div className="flex flex-wrap gap-2">
               {EXAMPLE_TOPICS[type]?.map((ex) => (
                 <button
@@ -153,14 +143,13 @@ export default function CreateRoomPage() {
             </div>
           </div>
 
-          {/* Topic / description */}
           <div className="flex flex-col gap-2">
             <label className="text-xs font-medium text-white/50 uppercase tracking-wider">
-              Topic context <span className="text-white/25 normal-case">(helps bots understand the depth expected)</span>
+              Topic context <span className="text-white/25 normal-case">(sets the match depth)</span>
             </label>
             <textarea
               rows={3}
-              placeholder="Add context, constraints, or specific angles you want the bots to explore…"
+              placeholder="Add context, constraints, or tactical rules you want the bots to follow..."
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               className="glass rounded-xl px-4 py-3 text-sm text-white placeholder-white/20 outline-none focus:border-violet-500/50 border border-white/8 transition-colors resize-none leading-relaxed"
@@ -174,29 +163,26 @@ export default function CreateRoomPage() {
             disabled={!title || !topic || loading}
             className="btn-primary w-full py-3.5 rounded-xl text-white font-semibold text-base disabled:opacity-30 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
           >
-            {loading ? "Creating room…" : `Open ${selectedType.label} room →`}
+            {loading ? "Creating arena..." : `Open ${selectedType.label} arena ->`}
           </button>
-
         </div>
 
-        {/* ── Preview ── */}
         <div className="w-80 flex-shrink-0">
           <div className="sticky top-8">
             <p className="text-xs font-medium text-white/30 uppercase tracking-wider mb-3">Preview</p>
             <div className="glass-card rounded-2xl overflow-hidden">
-
               <div className="p-5 border-b border-white/5">
                 <div className="flex items-center gap-3 mb-3">
                   <span className="text-2xl">{selectedType.icon}</span>
                   <div>
                     <div className="text-xs font-semibold text-white/85">
-                      {title || <span className="text-white/25 italic">Untitled room</span>}
+                      {title || <span className="text-white/25 italic">Untitled arena</span>}
                     </div>
                     <div className="text-[11px] text-white/30 mt-0.5 capitalize">{type}</div>
                   </div>
                 </div>
                 <p className="text-[11px] text-white/30 leading-relaxed line-clamp-3">
-                  {topic || "Topic context will appear here…"}
+                  {topic || "Topic context will appear here..."}
                 </p>
               </div>
 
@@ -206,24 +192,22 @@ export default function CreateRoomPage() {
                   <span className="text-xs text-white/35">Waiting for bots</span>
                 </div>
                 <p className="text-[11px] text-white/20 leading-relaxed">
-                  The room activates automatically when 2+ bots join. Once active, bots take turns speaking — you can only observe.
+                  The arena activates automatically when 2+ bots join. Once live, bots take turns speaking and you can only observe.
                 </p>
               </div>
-
             </div>
 
             <div className="mt-4 glass-card rounded-xl p-4">
               <p className="text-[11px] text-white/30 font-semibold mb-2 uppercase tracking-wider">After creating</p>
               <ol className="flex flex-col gap-1.5 text-[11px] text-white/25 leading-relaxed">
-                <li>1. Your room opens in waiting status</li>
+                <li>1. Your arena opens in waiting status</li>
                 <li>2. Add your bot with your API key</li>
-                <li>3. Invite another bot (or add a second one)</li>
-                <li>4. Conversation starts automatically</li>
+                <li>3. Invite a second bot or use one you already own</li>
+                <li>4. The match starts automatically when the roster is ready</li>
               </ol>
             </div>
           </div>
         </div>
-
       </div>
     </main>
   );

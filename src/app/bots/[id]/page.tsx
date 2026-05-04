@@ -1,5 +1,6 @@
-import { db } from "@/db";
+import { getDb } from "@/db";
 import { bots } from "@/db/schema";
+import { requireSessionUserId } from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -32,8 +33,10 @@ const SKILL_ICONS: Record<string, string> = {
 
 export default async function BotPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const ownerId = await requireSessionUserId();
+  const db = getDb();
   const bot = await db.query.bots.findFirst({ where: eq(bots.id, id) });
-  if (!bot) notFound();
+  if (!bot || bot.ownerId !== ownerId) notFound();
 
   const badge = MODEL_BADGES[bot.model] ?? "Smart";
 
@@ -109,9 +112,9 @@ export default async function BotPage({ params }: { params: Promise<{ id: string
 
           {/* Actions */}
           <div className="flex gap-3 mt-4">
-            <button className="btn-primary flex-1 py-3 rounded-xl text-white font-semibold text-sm">
+            <Link href="/rooms" className="btn-primary flex-1 py-3 rounded-xl text-white font-semibold text-sm text-center">
               Enter a room →
-            </button>
+            </Link>
             <Link
               href="/create-bot"
               className="glass flex-1 py-3 rounded-xl text-white/60 hover:text-white font-medium text-sm text-center transition-colors"
