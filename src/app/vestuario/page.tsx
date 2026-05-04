@@ -1,6 +1,6 @@
 import { getDb } from "@/db";
 import { bots, matchEvents, roomBots, rooms, users } from "@/db/schema";
-import { readSessionUserId, SESSION_COOKIE_NAME } from "@/lib/auth";
+import { SESSION_COOKIE_NAME, readSessionUserId } from "@/lib/auth";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
 import Link from "next/link";
@@ -50,7 +50,7 @@ export default async function VestuarioPage() {
   const activeBots = myBots.filter((bot) => !bot.eliminatedAt).length;
   const deadBots = myBots.filter((bot) => bot.eliminatedAt).length;
   const liveRooms = myRooms.filter((room) => room.status === "active" || room.status === "starting").length;
-  const closedRooms = myRooms.filter((room) => room.status === "closed").length;
+  const closedRooms = myRooms.filter((room) => room.status === "closed" || room.status === "archived").length;
   const upcomingRooms = myRooms.filter((room) => room.status === "draft" || room.status === "locked" || room.status === "starting");
 
   return (
@@ -86,10 +86,10 @@ export default async function VestuarioPage() {
       </nav>
 
       <div className="relative z-10 px-6 py-8 max-w-7xl mx-auto w-full flex flex-col gap-6">
-        <section className="glass-card rounded-2xl p-6 flex flex-col gap-4">
+        <section className="glass-card rounded-2xl p-6 flex flex-col gap-5">
           <div className="flex items-start justify-between gap-6 flex-wrap">
             <div>
-              <div className="text-[11px] uppercase tracking-[0.3em] text-white/25 mb-2">Player profile</div>
+              <div className="text-[11px] uppercase tracking-[0.3em] text-white/25 mb-2">Club profile</div>
               <h1 className="text-3xl md:text-4xl font-bold text-white/90 leading-tight">{user.displayName}</h1>
               <div className="mt-2 flex items-center gap-2 flex-wrap">
                 <span className="text-xs px-2 py-1 rounded-full border border-white/10 bg-white/5 text-white/45">
@@ -98,37 +98,47 @@ export default async function VestuarioPage() {
                 <span className="text-xs px-2 py-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 text-emerald-300">
                   {user.plan.toUpperCase()} plan
                 </span>
+                <span className="text-xs px-2 py-1 rounded-full border border-cyan-500/20 bg-cyan-500/10 text-cyan-300">
+                  Rank score {user.competitiveScore}
+                </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 min-w-[240px]">
+            <div className="grid grid-cols-2 gap-3 min-w-[260px]">
               <StatCard label="Arena score" value={user.competitiveScore.toString()} />
               <StatCard label="Wallet" value={`$${(user.walletBalanceCents / 100).toFixed(2)}`} />
-              <StatCard label="Bots" value={myBots.length.toString()} />
-              <StatCard label="Arenas" value={myRooms.length.toString()} />
+              <StatCard label="Roster size" value={myBots.length.toString()} />
+              <StatCard label="Owned arenas" value={myRooms.length.toString()} />
             </div>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-3">
+            <MiniPulse label="Alive bots" value={activeBots} tone="emerald" />
+            <MiniPulse label="Dead bots" value={deadBots} tone="red" />
+            <MiniPulse label="Live arenas" value={liveRooms} tone="sky" />
+            <MiniPulse label="Closed arenas" value={closedRooms} tone="violet" />
           </div>
         </section>
 
-        <div className="grid lg:grid-cols-[1.5fr_0.9fr] gap-6">
+        <div className="grid lg:grid-cols-[1.45fr_0.95fr] gap-6">
           <section className="glass-card rounded-2xl overflow-hidden">
             <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
               <div>
-                <div className="text-xs font-semibold text-white/30 uppercase tracking-widest">Squad</div>
-                <p className="text-[11px] text-white/25 mt-1">Your bots, records and current battlefield state.</p>
+                <div className="text-xs font-semibold text-white/30 uppercase tracking-widest">Squad board</div>
+                <p className="text-[11px] text-white/25 mt-1">Roster, form and elimination status.</p>
               </div>
               <Link href="/create-bot" className="text-xs text-violet-300 hover:text-violet-200 transition-colors">
                 + Recruit bot
               </Link>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px]">
+              <table className="w-full min-w-[760px]">
                 <thead className="text-[10px] uppercase tracking-widest text-white/25">
                   <tr className="border-b border-white/5">
                     <th className="text-left font-medium px-5 py-3">Bot</th>
                     <th className="text-left font-medium px-5 py-3">Model</th>
                     <th className="text-left font-medium px-5 py-3">Record</th>
-                    <th className="text-left font-medium px-5 py-3">Legend</th>
+                    <th className="text-left font-medium px-5 py-3">Tier / ELO</th>
                     <th className="text-left font-medium px-5 py-3">State</th>
                   </tr>
                 </thead>
@@ -136,7 +146,7 @@ export default async function VestuarioPage() {
                   {myBots.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-5 py-10 text-center text-sm text-white/25">
-                        No bots yet. Recruit your first fighter and add it to the squad.
+                        No bots yet. Recruit your first fighter and start climbing.
                       </td>
                     </tr>
                   ) : (
@@ -150,11 +160,13 @@ export default async function VestuarioPage() {
                         <td className="px-5 py-4 text-sm text-white/55">
                           {bot.wins}W / {bot.losses}L
                         </td>
-                        <td className="px-5 py-4 text-sm text-white/55">Tier {bot.legendTier} · ELO {bot.eloRating}</td>
+                        <td className="px-5 py-4 text-sm text-white/55">
+                          Tier {bot.legendTier} · ELO {bot.eloRating}
+                        </td>
                         <td className="px-5 py-4">
                           {bot.eliminatedAt ? (
                             <span className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-300">
-                              <span>✕</span>
+                              <span>X</span>
                               Eliminated
                             </span>
                           ) : (
@@ -177,20 +189,18 @@ export default async function VestuarioPage() {
 
           <section className="flex flex-col gap-6">
             <div className="glass-card rounded-2xl p-5">
-              <div className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Front office</div>
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard label="Active bots" value={activeBots.toString()} compact />
-                <StatCard label="Dead bots" value={deadBots.toString()} compact />
-                <StatCard label="Live arenas" value={liveRooms.toString()} compact />
-                <StatCard label="Closed arenas" value={closedRooms.toString()} compact />
-              </div>
-              <div className="mt-4 rounded-xl border border-white/5 bg-white/3 p-4">
-                <div className="text-[11px] uppercase tracking-widest text-white/25">Wallet status</div>
+              <div className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Plan and wallet</div>
+              <div className="rounded-xl border border-white/5 bg-white/3 p-4">
+                <div className="text-[11px] uppercase tracking-widest text-white/25">Access policy</div>
                 <div className="mt-2 text-sm text-white/70">
                   {user.plan === "free"
-                    ? "Free plan does not allow betting. Wallet is read-only until plan upgrades are enabled."
-                    : `Wallet available: $${(user.walletBalanceCents / 100).toFixed(2)}`}
+                    ? "Free plan can compete for points only. Betting and USD controls stay locked."
+                    : `Wallet enabled. Current available balance: $${(user.walletBalanceCents / 100).toFixed(2)}`}
                 </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <ActionLink href="/create-bot" label="Create bot" sub="Add a new fighter" />
+                <ActionLink href="/create-room" label="Create arena" sub="Open a new match room" />
               </div>
             </div>
 
@@ -329,6 +339,31 @@ function StatCard({ label, value, compact = false }: { label: string; value: str
       <div className="text-[10px] uppercase tracking-widest text-white/25">{label}</div>
       <div className={`font-bold text-white/85 ${compact ? "text-xl" : "text-2xl"} mt-1`}>{value}</div>
     </div>
+  );
+}
+
+function MiniPulse({ label, value, tone }: { label: string; value: number; tone: "emerald" | "red" | "sky" | "violet" }) {
+  const toneClass = {
+    emerald: "border-emerald-500/20 bg-emerald-500/10 text-emerald-300",
+    red: "border-red-500/20 bg-red-500/10 text-red-300",
+    sky: "border-cyan-500/20 bg-cyan-500/10 text-cyan-300",
+    violet: "border-violet-500/20 bg-violet-500/10 text-violet-300",
+  }[tone];
+
+  return (
+    <div className={`rounded-xl border px-3 py-3 ${toneClass}`}>
+      <div className="text-[10px] uppercase tracking-widest opacity-70">{label}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
+    </div>
+  );
+}
+
+function ActionLink({ href, label, sub }: { href: string; label: string; sub: string }) {
+  return (
+    <Link href={href} className="rounded-xl border border-white/5 bg-white/3 px-4 py-3 hover:border-white/10 hover:bg-white/5 transition-colors">
+      <div className="text-sm font-medium text-white/85">{label}</div>
+      <div className="text-[11px] text-white/30 mt-1">{sub}</div>
+    </Link>
   );
 }
 
