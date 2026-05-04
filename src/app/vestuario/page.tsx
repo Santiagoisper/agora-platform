@@ -1,7 +1,7 @@
 import { getDb } from "@/db";
-import { bots, rooms, users } from "@/db/schema";
+import { bots, matchEvents, roomBots, rooms, users } from "@/db/schema";
 import { readSessionUserId, SESSION_COOKIE_NAME } from "@/lib/auth";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
 import Link from "next/link";
 
@@ -25,10 +25,33 @@ export default async function VestuarioPage() {
     db.select().from(rooms).where(eq(rooms.ownerId, user.id)).orderBy(desc(rooms.createdAt)).limit(12),
   ]);
 
+  const roomIds = myRooms.map((room) => room.id);
+  const [rosterRows, winnerEvents] = roomIds.length
+    ? await Promise.all([
+        db.select({ roomId: roomBots.roomId }).from(roomBots).where(inArray(roomBots.roomId, roomIds)),
+        db
+          .select({
+            roomId: matchEvents.roomId,
+            summary: matchEvents.summary,
+            createdAt: matchEvents.createdAt,
+          })
+          .from(matchEvents)
+          .where(and(inArray(matchEvents.roomId, roomIds), eq(matchEvents.eventType, "winner_declared")))
+          .orderBy(desc(matchEvents.createdAt))
+          .limit(20),
+      ])
+    : [[], []];
+
+  const rosterCountByRoom = new Map<string, number>();
+  for (const row of rosterRows) {
+    rosterCountByRoom.set(row.roomId, (rosterCountByRoom.get(row.roomId) ?? 0) + 1);
+  }
+
   const activeBots = myBots.filter((bot) => !bot.eliminatedAt).length;
   const deadBots = myBots.filter((bot) => bot.eliminatedAt).length;
   const liveRooms = myRooms.filter((room) => room.status === "active" || room.status === "starting").length;
   const closedRooms = myRooms.filter((room) => room.status === "closed").length;
+  const upcomingRooms = myRooms.filter((room) => room.status === "draft" || room.status === "locked" || room.status === "starting");
 
   return (
     <main className="relative min-h-screen overflow-hidden flex flex-col">
@@ -127,7 +150,7 @@ export default async function VestuarioPage() {
                         <td className="px-5 py-4 text-sm text-white/55">
                           {bot.wins}W / {bot.losses}L
                         </td>
-                        <td className="px-5 py-4 text-sm text-white/55">Tier {bot.legendTier}</td>
+                        <td className="px-5 py-4 text-sm text-white/55">Tier {bot.legendTier} · ELO {bot.eloRating}</td>
                         <td className="px-5 py-4">
                           {bot.eliminatedAt ? (
                             <span className="inline-flex items-center gap-2 text-xs px-2 py-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-300">
@@ -140,6 +163,9 @@ export default async function VestuarioPage() {
                               Alive
                             </span>
                           )}
+                          <Link href={`/bots/${bot.id}`} className="ml-3 text-xs text-violet-300 hover:text-violet-200 transition-colors">
+                            View profile
+                          </Link>
                         </td>
                       </tr>
                     ))
@@ -169,12 +195,12 @@ export default async function VestuarioPage() {
             </div>
 
             <div className="glass-card rounded-2xl p-5">
-              <div className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Recent arenas</div>
+              <div className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Upcoming arenas</div>
               <div className="flex flex-col gap-3">
-                {myRooms.length === 0 ? (
-                  <p className="text-sm text-white/25">No arenas yet. Create one from the arena console.</p>
+                {upcomingRooms.length === 0 ? (
+                  <p className="text-sm text-white/25">No upcoming arenas. Create one and lock it for combat.</p>
                 ) : (
-                  myRooms.slice(0, 5).map((room) => (
+                  upcomingRooms.slice(0, 4).map((room) => (
                     <Link
                       key={room.id}
                       href={`/rooms/${room.id}`}
@@ -184,10 +210,35 @@ export default async function VestuarioPage() {
                         <div>
                           <div className="text-sm font-medium text-white/85">{room.title}</div>
                           <div className="text-[11px] text-white/25 capitalize">
-                            {room.type} · {room.status}
+                            {room.type} · {room.status} · roster {rosterCountByRoom.get(room.id) ?? 0}
                           </div>
                         </div>
                         <div className="text-[11px] text-white/30">#{room.id.slice(0, 6)}</div>
+                      </div>
+                    </Link>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="glass-card rounded-2xl p-5">
+              <div className="text-xs font-semibold text-white/30 uppercase tracking-widest mb-4">Combat history</div>
+              <div className="flex flex-col gap-3">
+                {winnerEvents.length === 0 ? (
+                  <p className="text-sm text-white/25">No closed combats yet.</p>
+                ) : (
+                  winnerEvents.slice(0, 5).map((event) => (
+                    <Link
+                      key={`${event.roomId}-${event.createdAt.toISOString()}`}
+                      href={`/rooms/${event.roomId}`}
+                      className="rounded-xl border border-white/5 bg-white/3 px-4 py-3 hover:border-white/10 hover:bg-white/5 transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <div className="text-sm font-medium text-white/85">{event.summary}</div>
+                          <div className="text-[11px] text-white/25">{event.createdAt.toLocaleString()}</div>
+                        </div>
+                        <div className="text-[11px] text-white/30">#{event.roomId.slice(0, 6)}</div>
                       </div>
                     </Link>
                   ))
