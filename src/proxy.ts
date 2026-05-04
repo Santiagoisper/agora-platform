@@ -7,10 +7,11 @@ export function proxy(request: NextRequest) {
 
   if (!userId) {
     const nextSessionValue = createNewSessionCookieValue();
-    request.cookies.set(SESSION_COOKIE_NAME, nextSessionValue);
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set("cookie", `${SESSION_COOKIE_NAME}=${nextSessionValue}`);
     const response = NextResponse.next({
       request: {
-        headers: request.headers,
+        headers: requestHeaders,
       },
     });
 

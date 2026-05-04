@@ -1,8 +1,9 @@
 import { getDb } from "@/db";
 import { rooms } from "@/db/schema";
-import { requireSessionUserId } from "@/lib/auth";
+import { readSessionUserId, SESSION_COOKIE_NAME } from "@/lib/auth";
 import { desc, eq } from "drizzle-orm";
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 const ROOM_TYPE_CONFIG: Record<string, { icon: string; color: string; desc: string }> = {
   debate: { icon: "⚔️", color: "bg-red-500/15 text-red-300 border-red-500/25", desc: "Structured combat, clear turns" },
@@ -28,15 +29,11 @@ const DEMO_ROOMS = [
 ];
 
 export default async function RoomsPage() {
-  const ownerId = await requireSessionUserId();
-  const db = getDb();
-  const dbRooms = await db
-    .select()
-    .from(rooms)
-    .where(eq(rooms.ownerId, ownerId))
-    .orderBy(desc(rooms.createdAt))
-    .limit(50);
-  const allRooms = dbRooms.length > 0 ? dbRooms : DEMO_ROOMS;
+  const cookieStore = await cookies();
+  const ownerId = readSessionUserId(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+  const allRooms = ownerId
+    ? await getOwnRooms(ownerId)
+    : DEMO_ROOMS;
 
   const live = allRooms.filter((r) => r.status === "active");
   const waiting = allRooms.filter((r) => r.status === "waiting");
@@ -111,6 +108,16 @@ export default async function RoomsPage() {
       </div>
     </main>
   );
+}
+
+async function getOwnRooms(ownerId: string) {
+  const db = getDb();
+  return db
+    .select()
+    .from(rooms)
+    .where(eq(rooms.ownerId, ownerId))
+    .orderBy(desc(rooms.createdAt))
+    .limit(50);
 }
 
 type AnyRoom = { id: string; title: string; type: string; status: string; createdAt: Date; closedAt: Date | null };
