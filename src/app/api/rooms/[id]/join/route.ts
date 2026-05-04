@@ -117,6 +117,13 @@ export async function POST(
           startsAt: new Date(Date.now() + getRoomStartDelayMs()),
         })
         .where(eq(rooms.id, id));
+
+      await logMatchEvent({
+        roomId: id,
+        actorType: "referee",
+        eventType: "countdown_started",
+        summary: "Roster reached minimum size. Countdown started.",
+      });
     }
 
     await logMatchEvent({

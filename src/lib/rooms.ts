@@ -3,7 +3,7 @@ import { bots, messages, roomBots, rooms } from "@/db/schema";
 import { resolveVaultReference, revokeVaultReference } from "@/lib/key-vault";
 import { logMatchEvent } from "@/lib/match-events";
 import { decryptSecret } from "@/lib/secrets";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 
 export interface RoomParticipant {
   id: string;
@@ -31,6 +31,10 @@ const ROOM_START_DELAY_MS = 3000;
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
+const ELO_K = 24;
+const BOT_ELIMINATION_LOSS_LIMIT = 5;
+const LEGEND_TIER_TWO_WINS = 10;
+const LEGEND_TIER_THREE_WINS = 20;
 
 const ROOM_RULES: Record<string, string> = {
   debate: "Take a position, address the strongest opposing point, and stay concrete.",
@@ -99,6 +103,17 @@ function pickWinningBot(scores: Map<string, number>) {
   }
 
   return winner;
+}
+
+function expectedScore(eloA: number, eloB: number) {
+  return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
+}
+
+function deriveLegendTier(wins: number) {
+  if (wins >= LEGEND_TIER_THREE_WINS) return 3;
+  if (wins >= LEGEND_TIER_TWO_WINS) return 2;
+  if (wins >= 5) return 1;
+  return 0;
 }
 
 function extractOpenAIText(data: unknown) {
@@ -536,6 +551,19 @@ export async function appendNextRoomMessage(roomId: string) {
     totals.set(message.botId, (totals.get(message.botId) ?? 0) + message.score);
     const winner = pickWinningBot(totals);
     const winnerName = participants.find((bot) => bot.id === winner?.botId)?.name ?? "unknown";
+    const botRows = await db
+      .select({
+        id: bots.id,
+        name: bots.name,
+        eloRating: bots.eloRating,
+        wins: bots.wins,
+        losses: bots.losses,
+      })
+      .from(bots)
+      .where(inArray(bots.id, participants.map((p) => p.id)));
+
+    const winnerRow = botRows.find((row) => row.id === winner?.botId) ?? null;
+    const loserRows = botRows.filter((row) => row.id !== winner?.botId);
 
     await db
       .update(rooms)
@@ -562,6 +590,73 @@ export async function appendNextRoomMessage(roomId: string) {
       eventType: "arena_archived",
       summary: "Arena archived after winner declaration.",
     });
+
+    if (winnerRow) {
+      const averageLoserElo =
+        loserRows.length > 0
+          ? loserRows.reduce((sum, row) => sum + row.eloRating, 0) / loserRows.length
+          : winnerRow.eloRating;
+      const winnerExpected = expectedScore(winnerRow.eloRating, averageLoserElo);
+      const winnerNewElo = Math.max(800, Math.round(winnerRow.eloRating + ELO_K * (1 - winnerExpected)));
+      const winnerNewWins = winnerRow.wins + 1;
+
+      await db
+        .update(bots)
+        .set({
+          eloRating: winnerNewElo,
+          wins: winnerNewWins,
+          legendTier: deriveLegendTier(winnerNewWins),
+          lastBattleAt: new Date(),
+        })
+        .where(eq(bots.id, winnerRow.id));
+
+      await logMatchEvent({
+        roomId,
+        actorType: "referee",
+        actorId: winnerRow.id,
+        eventType: "rating_updated",
+        summary: `${winnerRow.name} ELO ${winnerRow.eloRating} -> ${winnerNewElo}`,
+        details: "Result: win",
+      });
+    }
+
+    for (const loser of loserRows) {
+      const referenceWinnerElo = winnerRow?.eloRating ?? loser.eloRating;
+      const loserExpected = expectedScore(loser.eloRating, referenceWinnerElo);
+      const loserNewElo = Math.max(800, Math.round(loser.eloRating + ELO_K * (0 - loserExpected)));
+      const loserNewLosses = loser.losses + 1;
+      const eliminated = loserNewLosses >= BOT_ELIMINATION_LOSS_LIMIT;
+
+      await db
+        .update(bots)
+        .set({
+          eloRating: loserNewElo,
+          losses: loserNewLosses,
+          lastBattleAt: new Date(),
+          eliminatedAt: eliminated ? new Date() : null,
+        })
+        .where(eq(bots.id, loser.id));
+
+      await logMatchEvent({
+        roomId,
+        actorType: "referee",
+        actorId: loser.id,
+        eventType: "rating_updated",
+        summary: `${loser.name} ELO ${loser.eloRating} -> ${loserNewElo}`,
+        details: "Result: loss",
+      });
+
+      if (eliminated) {
+        await logMatchEvent({
+          roomId,
+          actorType: "referee",
+          actorId: loser.id,
+          eventType: "bot_eliminated",
+          severity: "warn",
+          summary: `${loser.name} eliminated after ${loserNewLosses} losses.`,
+        });
+      }
+    }
   }
 
   return {

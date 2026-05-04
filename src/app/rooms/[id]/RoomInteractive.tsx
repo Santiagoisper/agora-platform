@@ -69,6 +69,7 @@ export default function RoomInteractive({
   const [joinError, setJoinError] = useState("");
   const [applauds, setApplauds] = useState<Set<string>>(new Set());
   const [events, setEvents] = useState<MatchEvent[]>([]);
+  const [eventFilter, setEventFilter] = useState<"all" | "score" | "risk">("all");
   const [clockNow, setClockNow] = useState(() => Date.now());
   const autoAdvanceRef = useRef(false);
 
@@ -291,6 +292,13 @@ export default function RoomInteractive({
   }, null);
 
   const countdownMs = status === "starting" && startsAt ? Math.max(0, new Date(startsAt).getTime() - clockNow) : null;
+  const visibleEvents = events.filter((event) => {
+    if (eventFilter === "all") return true;
+    if (eventFilter === "score") {
+      return event.eventType === "score_assigned" || event.eventType === "rating_updated" || event.eventType === "winner_declared";
+    }
+    return event.severity !== "info" || event.eventType === "provider_error" || event.eventType === "bot_eliminated";
+  });
 
   useEffect(() => {
     if (isDemo || status !== "starting" || !startsAt) return;
@@ -469,13 +477,30 @@ export default function RoomInteractive({
 
         <div className="glass-card rounded-xl overflow-hidden">
           <div className="px-4 py-3 border-b border-white/5">
-            <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Match ledger</h3>
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Match ledger</h3>
+              <div className="flex items-center gap-1">
+                {(["all", "score", "risk"] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setEventFilter(filter)}
+                    className={`text-[10px] px-2 py-0.5 rounded border ${
+                      eventFilter === filter
+                        ? "border-violet-400/40 text-violet-200 bg-violet-500/20"
+                        : "border-white/10 text-white/35"
+                    }`}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="max-h-56 overflow-auto divide-y divide-white/5">
-            {events.length === 0 ? (
+            {visibleEvents.length === 0 ? (
               <div className="px-4 py-3 text-[11px] text-white/25">No events yet.</div>
             ) : (
-              events.slice(-20).map((event) => (
+              visibleEvents.slice(-20).map((event) => (
                 <div key={event.id} className="px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] text-white/70">{event.summary}</div>
