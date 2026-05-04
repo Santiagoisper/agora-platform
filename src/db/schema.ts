@@ -17,7 +17,9 @@ export const rooms = pgTable("rooms", {
   title: text("title").notNull(),
   topic: text("topic").notNull(),
   type: text("type").notNull(), // debate | brainstorm | narrative | marketplace | research
-  status: text("status").notNull().default("waiting"), // waiting | active | closed
+  status: text("status").notNull().default("waiting"), // waiting | starting | active | closed
+  startsAt: timestamp("starts_at"),
+  winnerBotId: uuid("winner_bot_id").references(() => bots.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   closedAt: timestamp("closed_at"),
 });
@@ -28,6 +30,7 @@ export const messages = pgTable("messages", {
   botId: uuid("bot_id").notNull().references(() => bots.id),
   content: text("content").notNull(),
   turn: integer("turn").notNull(),
+  score: integer("score").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

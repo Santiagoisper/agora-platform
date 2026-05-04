@@ -20,6 +20,21 @@ export async function POST(
       return NextResponse.json({ error: "Room is closed" }, { status: 409 });
     }
 
+    if (room.status === "starting" && room.startsAt) {
+      const startsAt = new Date(room.startsAt).getTime();
+      const remainingMs = startsAt - Date.now();
+
+      if (remainingMs > 0) {
+        return NextResponse.json(
+          {
+            error: "Room is still starting",
+            startInMs: remainingMs,
+          },
+          { status: 409 }
+        );
+      }
+    }
+
     const participants = await listRoomParticipants(id);
 
     if (participants.length < 2) {
@@ -32,6 +47,13 @@ export async function POST(
     const result = await appendNextRoomMessage(id);
 
     return NextResponse.json({
+      room: result.room
+        ? {
+            id: result.room.id,
+            status: result.room.status,
+            startsAt: result.room.startsAt ?? null,
+          }
+        : null,
       message: result.message,
       roomClosed: result.roomClosed,
     });

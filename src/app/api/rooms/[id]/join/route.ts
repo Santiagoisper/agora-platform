@@ -2,8 +2,8 @@ import { requireSessionUserId } from "@/lib/auth";
 import { requireOwnedBot, requireOwnedRoom } from "@/lib/authorization";
 import { getDb } from "@/db";
 import { roomBots, rooms } from "@/db/schema";
-import { createVaultReference } from "@/lib/key-vault";
-import { appendNextRoomMessage, listRoomParticipants } from "@/lib/rooms";
+import { encryptSecret } from "@/lib/secrets";
+import { getRoomStartDelayMs, listRoomParticipants } from "@/lib/rooms";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -44,34 +44,42 @@ export async function POST(
     });
 
     if (existingMembership) {
-      return NextResponse.json({ error: "Bot is already in this room" }, { status: 409 });
+      await db
+        .update(roomBots)
+        .set({
+          apiKey: encryptSecret(apiKey),
+          joinedAt: new Date(),
+        })
+        .where(and(eq(roomBots.roomId, id), eq(roomBots.botId, botId)));
+    } else {
+      await db.insert(roomBots).values({
+        roomId: id,
+        botId,
+        apiKey: encryptSecret(apiKey),
+      });
     }
-
-    await db.insert(roomBots).values({
-      roomId: id,
-      botId,
-      apiKey: createVaultReference(apiKey),
-    });
 
     const participants = await listRoomParticipants(id);
-    const shouldActivate = room.status === "waiting" && participants.length >= 2;
+    const shouldStart = room.status === "waiting" && participants.length >= 2;
 
-    if (shouldActivate) {
+    if (shouldStart) {
       await db
         .update(rooms)
-        .set({ status: "active" })
+        .set({
+          status: "starting",
+          startsAt: new Date(Date.now() + getRoomStartDelayMs()),
+        })
         .where(eq(rooms.id, id));
     }
-
-    const firstMessageResult = shouldActivate ? await appendNextRoomMessage(id) : null;
 
     return NextResponse.json({
       room: {
         id,
-        status: shouldActivate ? "active" : room.status,
+        status: shouldStart ? "starting" : room.status,
+        startsAt: shouldStart ? new Date(Date.now() + getRoomStartDelayMs()) : room.startsAt,
       },
-      firstMessage: firstMessageResult?.message ?? null,
-      roomClosed: firstMessageResult?.roomClosed ?? false,
+      firstMessage: null,
+      roomClosed: false,
     });
   } catch (error) {
     console.error(error);

@@ -14,6 +14,7 @@ const ROOM_TYPE_CONFIG: Record<string, { icon: string; color: string; desc: stri
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
   waiting: { label: "Waiting", dot: "bg-yellow-400" },
+  starting: { label: "Starting", dot: "bg-emerald-400 animate-pulse" },
   active: { label: "Live", dot: "bg-emerald-400 animate-pulse" },
   closed: { label: "Closed", dot: "bg-white/20" },
 };

@@ -16,6 +16,7 @@ interface Message {
   botName: string;
   content: string;
   turn: number;
+  score: number;
   createdAt: string;
 }
 
@@ -30,6 +31,7 @@ interface RoomInteractiveProps {
   roomId: string;
   initialMessages: Message[];
   initialStatus: string;
+  initialStartsAt: string | null;
   initialBots: { name: string; model: string }[];
   isDemo: boolean;
 }
@@ -38,11 +40,13 @@ export default function RoomInteractive({
   roomId,
   initialMessages,
   initialStatus,
+  initialStartsAt,
   initialBots,
   isDemo,
 }: RoomInteractiveProps) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [status, setStatus] = useState(initialStatus);
+  const [startsAt, setStartsAt] = useState<string | null>(initialStartsAt);
   const [joinedParticipants, setJoinedParticipants] = useState<{ name: string; model: string }[]>([]);
   const [showJoin, setShowJoin] = useState(false);
   const [userBots, setUserBots] = useState<Bot[]>([]);
@@ -53,6 +57,7 @@ export default function RoomInteractive({
   const [autoRun, setAutoRun] = useState(true);
   const [joinError, setJoinError] = useState("");
   const [applauds, setApplauds] = useState<Set<string>>(new Set());
+  const [clockNow, setClockNow] = useState(() => Date.now());
   const autoAdvanceRef = useRef(false);
 
   const botColorMap = new Map(initialBots.map((b, i) => [b.name, BOT_COLORS[i % BOT_COLORS.length]]));
@@ -79,6 +84,27 @@ export default function RoomInteractive({
     const interval = setInterval(fetchMessages, 4000);
     return () => clearInterval(interval);
   }, [isDemo, status, fetchMessages]);
+
+  const handleNextTurn = useCallback(async () => {
+    setAdvancing(true);
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/turn`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to advance turn");
+      if (data.room) {
+        setStatus(data.room.status);
+        setStartsAt(data.room.startsAt ?? null);
+      }
+      if (data.message) {
+        setMessages((prev) => [...prev, data.message]);
+      }
+      if (data.roomClosed) setStatus("closed");
+    } catch (err) {
+      console.error("Turn error:", err);
+    } finally {
+      setAdvancing(false);
+    }
+  }, [roomId]);
 
   useEffect(() => {
     if (!autoRun || isDemo || status !== "active" || advancing) return;
@@ -136,6 +162,7 @@ export default function RoomInteractive({
 
       setShowJoin(false);
       setStatus(data.room.status);
+      setStartsAt(data.room.startsAt ?? null);
       const joinedBot = userBots.find((bot) => bot.id === selectedBot);
       if (joinedBot) {
         setJoinedParticipants((prev) => {
@@ -153,23 +180,6 @@ export default function RoomInteractive({
       setJoinError(err instanceof Error ? err.message : "Error joining room");
     } finally {
       setJoining(false);
-    }
-  };
-
-  const handleNextTurn = async () => {
-    setAdvancing(true);
-    try {
-      const res = await fetch(`/api/rooms/${roomId}/turn`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to advance turn");
-      if (data.message) {
-        setMessages((prev) => [...prev, data.message]);
-      }
-      if (data.roomClosed) setStatus("closed");
-    } catch (err) {
-      console.error("Turn error:", err);
-    } finally {
-      setAdvancing(false);
     }
   };
 
@@ -193,12 +203,13 @@ export default function RoomInteractive({
   );
 
   const scorecard = participants.map((bot) => {
-    const rounds = messages.filter((message) => message.botName === bot.name).length;
+    const score = messages
+      .filter((message) => message.botName === bot.name)
+      .reduce((total, message) => total + (message.score ?? 0), 0);
     return {
       name: bot.name,
       model: bot.model,
-      rounds,
-      score: rounds,
+      score,
     };
   });
 
@@ -209,13 +220,48 @@ export default function RoomInteractive({
     return best;
   }, null);
 
+  const countdownMs = status === "starting" && startsAt ? Math.max(0, new Date(startsAt).getTime() - clockNow) : null;
+
+  useEffect(() => {
+    if (isDemo || status !== "starting" || !startsAt) return;
+
+    const sync = window.setTimeout(() => setClockNow(Date.now()), 0);
+    const interval = window.setInterval(() => setClockNow(Date.now()), 1000);
+
+    return () => {
+      window.clearTimeout(sync);
+      window.clearInterval(interval);
+    };
+  }, [isDemo, startsAt, status]);
+
+  useEffect(() => {
+    if (isDemo || status !== "starting" || countdownMs === null || countdownMs > 0 || advancing) {
+      return;
+    }
+
+    const startRound = window.setTimeout(() => {
+      void handleNextTurn();
+    }, 0);
+
+    return () => window.clearTimeout(startRound);
+  }, [advancing, countdownMs, handleNextTurn, isDemo, status]);
+
   return (
     <div className="flex flex-1 max-w-6xl mx-auto w-full px-6 py-6 gap-6">
       <div className="flex-1 flex flex-col gap-3 min-w-0">
-        {messages.length === 0 ? (
+        {messages.length === 0 && status === "waiting" ? (
           <div className="glass-card rounded-xl px-5 py-12 text-center">
             <p className="text-white/25 text-sm mb-1">Waiting for bots to join...</p>
             <p className="text-white/15 text-xs">Add a second bot and the referee will start the round clock.</p>
+          </div>
+        ) : status === "starting" && messages.length === 0 ? (
+          <div className="glass-card rounded-xl px-5 py-12 text-center border border-emerald-500/20 bg-emerald-500/8">
+            <p className="text-emerald-200 text-sm font-medium mb-1">Starting soon</p>
+            <p className="text-emerald-200/60 text-xs">
+              {countdownMs !== null && countdownMs > 0
+                ? `Round 1 begins in ${Math.max(1, Math.ceil(countdownMs / 1000))}s.`
+                : "The referee is starting round 1 now."}
+            </p>
           </div>
         ) : (
           messages.map((msg) => {
@@ -278,11 +324,13 @@ export default function RoomInteractive({
           </button>
         )}
 
-        {isLive && messages.length === 0 && (
+        {status === "starting" && (
           <div className="glass-card rounded-xl px-5 py-3 text-center border border-emerald-500/20 bg-emerald-500/8">
-            <p className="text-sm text-emerald-200 font-medium">Match ready</p>
+            <p className="text-sm text-emerald-200 font-medium">Starting soon</p>
             <p className="text-[11px] text-emerald-200/60 mt-1">
-              The referee is starting round 1 now. If no message appears, the first provider turn failed and will retry on the next tick.
+              {countdownMs !== null && countdownMs > 0
+                ? `Round 1 begins in ${Math.max(1, Math.ceil(countdownMs / 1000))}s.`
+                : "The referee is starting round 1 now."}
             </p>
           </div>
         )}
@@ -338,8 +386,18 @@ export default function RoomInteractive({
           <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Referee</h3>
           <div className="text-sm text-white/70">Arena system</div>
           <p className="text-[11px] text-white/25 leading-relaxed">
-            Today the referee is deterministic: it starts the match when the roster is ready, advances rounds, and closes at the round cap.
+            Today the referee is deterministic: it starts the match on a countdown, advances rounds, and closes at the round cap.
           </p>
+          {status === "starting" && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2">
+              <div className="text-[10px] uppercase tracking-widest text-emerald-200/60">Clock</div>
+              <div className="text-sm font-semibold text-emerald-100 mt-1">
+                {countdownMs !== null && countdownMs > 0
+                  ? `${Math.max(1, Math.ceil(countdownMs / 1000))}s`
+                  : "Starting now"}
+              </div>
+            </div>
+          )}
           <div className="pt-1 border-t border-white/5">
             <div className="text-[10px] text-white/25 uppercase tracking-widest mb-2">Scoreboard</div>
             <div className="flex flex-col gap-2">
@@ -358,6 +416,11 @@ export default function RoomInteractive({
               {leader && (
                 <div className="pt-2 mt-1 border-t border-white/5 text-[11px] text-white/35">
                   Current leader: <span className="text-white/70">{leader.name}</span>
+                </div>
+              )}
+              {status === "closed" && (
+                <div className="pt-2 mt-1 border-t border-white/5 text-[11px] text-white/35">
+                  Winner: <span className="text-white/70">{leader?.name ?? "TBD"}</span>
                 </div>
               )}
             </div>

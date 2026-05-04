@@ -21,10 +21,12 @@ export interface SerializedRoomMessage {
   botName: string;
   content: string;
   turn: number;
+  score: number;
   createdAt: string;
 }
 
 const MAX_ROOM_TURNS = 12;
+const ROOM_START_DELAY_MS = 3000;
 const OPENAI_API_URL = "https://api.openai.com/v1/responses";
 const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -59,6 +61,29 @@ function inferProvider(model: string) {
 
 function mapAnthropicModel(model: string) {
   return ANTHROPIC_MODEL_MAP[model] ?? model;
+}
+
+function scoreMessage(content: string, turn: number, roomType: string) {
+  const normalized = content.toLowerCase();
+  const lengthScore = Math.min(2, Math.max(0, Math.floor(content.trim().length / 60)));
+  const evidenceScore = /(data|evidence|because|therefore|percent|%|study|according)/.test(normalized) ? 1 : 0;
+  const structureScore = /(however|but|yet|counter|opposing|risk|tradeoff)/.test(normalized) ? 1 : 0;
+  const pressureScore = roomType === "research" && /(citation|source|study|metric)/.test(normalized) ? 1 : 0;
+  const tempoScore = turn === 1 ? 1 : 0;
+
+  return Math.max(1, Math.min(5, 1 + lengthScore + evidenceScore + structureScore + pressureScore + tempoScore));
+}
+
+function pickWinningBot(scores: Map<string, number>) {
+  let winner: { botId: string; score: number } | null = null;
+
+  for (const [botId, score] of scores.entries()) {
+    if (!winner || score > winner.score) {
+      winner = { botId, score };
+    }
+  }
+
+  return winner;
 }
 
 function extractOpenAIText(data: unknown) {
@@ -295,6 +320,28 @@ async function listRoomParticipantsWithKeys(roomId: string): Promise<RoomPartici
   }));
 }
 
+async function activateRoomIfDue(roomId: string) {
+  const db = getDb();
+  const room = await getRoomById(roomId);
+
+  if (!room || room.status !== "starting") {
+    return room;
+  }
+
+  const startsAt = room.startsAt ? new Date(room.startsAt).getTime() : null;
+  if (startsAt && Date.now() < startsAt) {
+    return room;
+  }
+
+  const [updated] = await db
+    .update(rooms)
+    .set({ status: "active", startsAt: null })
+    .where(eq(rooms.id, roomId))
+    .returning();
+
+  return updated ?? room;
+}
+
 async function purgeRoomApiKeys(roomId: string) {
   const db = getDb();
 
@@ -323,6 +370,7 @@ export async function listRoomMessages(roomId: string): Promise<SerializedRoomMe
       botName: bots.name,
       content: messages.content,
       turn: messages.turn,
+      score: messages.score,
       createdAt: messages.createdAt,
     })
     .from(messages)
@@ -336,9 +384,31 @@ export async function listRoomMessages(roomId: string): Promise<SerializedRoomMe
   }));
 }
 
+export async function getRoomRefereeState(roomId: string) {
+  const room = await getRoomById(roomId);
+  const participants = await listRoomParticipants(roomId);
+  const messagesList = await listRoomMessages(roomId);
+  const scoreByBot = new Map<string, number>();
+
+  for (const message of messagesList) {
+    scoreByBot.set(message.botId, (scoreByBot.get(message.botId) ?? 0) + message.score);
+  }
+
+  const leader = pickWinningBot(scoreByBot);
+
+  return {
+    room,
+    participants,
+    messages: messagesList,
+    scoreByBot,
+    leader,
+    startsAt: room?.startsAt ? room.startsAt.toISOString() : null,
+  };
+}
+
 export async function appendNextRoomMessage(roomId: string) {
   const db = getDb();
-  const room = await getRoomById(roomId);
+  const room = await activateRoomIfDue(roomId);
 
   if (!room) {
     return { room: null, message: null, roomClosed: false };
@@ -349,6 +419,13 @@ export async function appendNextRoomMessage(roomId: string) {
 
   if (room.status === "closed") {
     return { room, message: null, roomClosed: true };
+  }
+
+  if (room.status === "starting" && room.startsAt) {
+    const startsAt = new Date(room.startsAt).getTime();
+    if (Date.now() < startsAt) {
+      return { room, message: null, roomClosed: false };
+    }
   }
 
   if (participants.length < 2) {
@@ -388,15 +465,27 @@ export async function appendNextRoomMessage(roomId: string) {
       botId: speaker.id,
       content,
       turn: nextTurn,
+      score: scoreMessage(content, nextTurn, room.type),
     })
     .returning();
 
   const roomClosed = nextTurn >= MAX_ROOM_TURNS;
 
   if (roomClosed) {
+    const totals = new Map<string, number>();
+    for (const prev of previousMessages) {
+      totals.set(prev.botId, (totals.get(prev.botId) ?? 0) + prev.score);
+    }
+    totals.set(message.botId, (totals.get(message.botId) ?? 0) + message.score);
+    const winner = pickWinningBot(totals);
+
     await db
       .update(rooms)
-      .set({ status: "closed", closedAt: new Date() })
+      .set({
+        status: "closed",
+        closedAt: new Date(),
+        winnerBotId: winner?.botId ?? null,
+      })
       .where(eq(rooms.id, roomId));
     await purgeRoomApiKeys(roomId);
   }
@@ -409,8 +498,13 @@ export async function appendNextRoomMessage(roomId: string) {
       botName: speaker.name,
       content: message.content,
       turn: message.turn,
+      score: message.score,
       createdAt: message.createdAt.toISOString(),
     },
     roomClosed,
   };
+}
+
+export function getRoomStartDelayMs() {
+  return ROOM_START_DELAY_MS;
 }
