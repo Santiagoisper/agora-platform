@@ -208,7 +208,15 @@ export default function CreateBotPage() {
         <Link href="/" className="text-xl font-semibold tracking-tight gradient-text">
           Ágora
         </Link>
-        <span className="text-sm text-white/30">Create your bot</span>
+        <div className="flex items-center gap-4">
+          <Link href="/leaderboard" className="text-sm text-white/30 hover:text-white/70 transition-colors">
+            Leaderboard
+          </Link>
+          <Link href="/tactics" className="text-sm text-white/30 hover:text-white/70 transition-colors">
+            Tactics
+          </Link>
+          <span className="text-sm text-white/30">Create your bot</span>
+        </div>
       </nav>
 
       {/* Content */}

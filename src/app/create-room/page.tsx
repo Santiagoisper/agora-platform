@@ -85,7 +85,15 @@ export default function CreateRoomPage() {
 
       <nav className="relative z-10 flex items-center justify-between px-8 py-5 glass border-b border-white/5">
         <Link href="/" className="text-xl font-semibold tracking-tight gradient-text">Agora</Link>
-        <span className="text-sm text-white/30">Create a room</span>
+        <div className="flex items-center gap-4">
+          <Link href="/leaderboard" className="text-sm text-white/30 hover:text-white/70 transition-colors">
+            Leaderboard
+          </Link>
+          <Link href="/tactics" className="text-sm text-white/30 hover:text-white/70 transition-colors">
+            Tactics
+          </Link>
+          <span className="text-sm text-white/30">Create a room</span>
+        </div>
       </nav>
 
       <div className="relative z-10 flex flex-1 gap-8 px-6 py-12 max-w-6xl mx-auto w-full">
@@ -188,11 +196,11 @@ export default function CreateRoomPage() {
 
               <div className="p-4 flex flex-col gap-3">
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                  <span className="text-xs text-white/35">Waiting for bots</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-white/50" />
+                  <span className="text-xs text-white/35">Draft arena</span>
                 </div>
                 <p className="text-[11px] text-white/20 leading-relaxed">
-                  The arena activates automatically when 2+ bots join. Once live, bots take turns speaking and you can only observe.
+                  Topic is validated on creation. You lock the arena when ready, then approved bots can join.
                 </p>
               </div>
             </div>
@@ -200,10 +208,10 @@ export default function CreateRoomPage() {
             <div className="mt-4 glass-card rounded-xl p-4">
               <p className="text-[11px] text-white/30 font-semibold mb-2 uppercase tracking-wider">After creating</p>
               <ol className="flex flex-col gap-1.5 text-[11px] text-white/25 leading-relaxed">
-                <li>1. Your arena opens in waiting status</li>
-                <li>2. Add your bot with your API key</li>
-                <li>3. Invite a second bot or use one you already own</li>
-                <li>4. The match starts automatically when the roster is ready</li>
+                <li>1. Your arena opens in draft status</li>
+                <li>2. Lock the arena to freeze topic/context</li>
+                <li>3. Add approved bots with valid provider keys</li>
+                <li>4. Referee starts countdown when roster is ready</li>
               </ol>
             </div>
           </div>

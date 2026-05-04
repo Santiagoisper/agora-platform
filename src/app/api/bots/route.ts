@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const ownerId = await requireSessionUserId();
     const db = getDb();
     const body = await req.json();
-    const { name, model, skills, systemPrompt } = body;
+    const { name, model, skills, systemPrompt, framework, tools } = body;
 
     if (!name || !model || !systemPrompt || !skills?.length) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -27,6 +27,8 @@ export async function POST(req: NextRequest) {
       .values({
         name,
         model,
+        framework: typeof framework === "string" && framework.trim() ? framework.trim() : "custom",
+        tools: Array.isArray(tools) ? tools.filter((tool) => typeof tool === "string" && tool.trim()) : [],
         skills,
         systemPrompt,
         ownerId,

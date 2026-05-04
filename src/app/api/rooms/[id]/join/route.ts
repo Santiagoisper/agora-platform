@@ -2,7 +2,9 @@ import { requireSessionUserId } from "@/lib/auth";
 import { requireOwnedBot, requireOwnedRoom } from "@/lib/authorization";
 import { getDb } from "@/db";
 import { roomBots, rooms } from "@/db/schema";
+import { logMatchEvent } from "@/lib/match-events";
 import { encryptSecret } from "@/lib/secrets";
+import { preflightBotForRoom } from "@/lib/bot-preflight";
 import { getRoomStartDelayMs, listRoomParticipants } from "@/lib/rooms";
 import { and, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -23,6 +25,9 @@ export async function POST(
     if (room.status === "closed") {
       return NextResponse.json({ error: "Room is closed" }, { status: 409 });
     }
+    if (room.status === "draft") {
+      return NextResponse.json({ error: "Room is draft. Lock the arena before bots can join." }, { status: 409 });
+    }
 
     const body = await req.json();
     const botId = typeof body.botId === "string" ? body.botId : "";
@@ -37,6 +42,48 @@ export async function POST(
 
     if (!bot) {
       return NextResponse.json({ error: "Bot not found" }, { status: 404 });
+    }
+
+    const preflight = preflightBotForRoom({
+      model: bot.model,
+      systemPrompt: bot.systemPrompt,
+      skills: bot.skills,
+      apiKey,
+      eliminatedAt: bot.eliminatedAt,
+    });
+
+    if (!preflight.ok) {
+      await logMatchEvent({
+        roomId: id,
+        actorType: "bot",
+        actorId: botId,
+        eventType: "bot_preflight_failed",
+        severity: "block",
+        summary: preflight.reason,
+        details: preflight.error,
+      });
+
+      return NextResponse.json(
+        {
+          error: preflight.error,
+          reason: preflight.reason,
+        },
+        { status: 400 }
+      );
+    }
+
+    await logMatchEvent({
+      roomId: id,
+      actorType: "bot",
+      actorId: botId,
+      eventType: "bot_preflight_passed",
+      severity: preflight.riskScore > 0 ? "warn" : "info",
+      summary: `Bot preflight passed with risk score ${preflight.riskScore}.`,
+      details: preflight.warnings.join(" | "),
+    });
+
+    if (room.status === "active") {
+      return NextResponse.json({ error: "Room already active. Join during locked/waiting phase." }, { status: 409 });
     }
 
     const existingMembership = await db.query.roomBots.findFirst({
@@ -60,7 +107,7 @@ export async function POST(
     }
 
     const participants = await listRoomParticipants(id);
-    const shouldStart = room.status === "waiting" && participants.length >= 2;
+    const shouldStart = (room.status === "waiting" || room.status === "locked") && participants.length >= 2;
 
     if (shouldStart) {
       await db
@@ -71,6 +118,14 @@ export async function POST(
         })
         .where(eq(rooms.id, id));
     }
+
+    await logMatchEvent({
+      roomId: id,
+      actorType: "bot",
+      actorId: botId,
+      eventType: "bot_joined",
+      summary: shouldStart ? "Bot joined. Countdown started." : "Bot joined locked arena.",
+    });
 
     return NextResponse.json({
       room: {

@@ -1,5 +1,6 @@
 import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import type { NextResponse } from "next/server";
 
 export const SESSION_COOKIE_NAME = "agora_session";
 
@@ -23,6 +24,17 @@ export function createSessionCookieValue(userId: string) {
 
 export function createNewSessionCookieValue() {
   return createSessionCookieValue(randomUUID());
+}
+
+export function setSessionCookie(response: NextResponse, userId: string) {
+  response.cookies.set({
+    name: SESSION_COOKIE_NAME,
+    value: createSessionCookieValue(userId),
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
 }
 
 export function readSessionUserId(cookieValue?: string | null) {

@@ -229,6 +229,12 @@ function RoomShell({
           </Link>
         </div>
         <div className="flex items-center gap-3">
+          <Link href="/leaderboard" className="text-xs text-white/35 hover:text-white/70 transition-colors">
+            Leaderboard
+          </Link>
+          <Link href="/tactics" className="text-xs text-white/35 hover:text-white/70 transition-colors">
+            Tactics
+          </Link>
           {isDemo && (
             <span className="text-[10px] font-medium px-2 py-1 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25">
               Demo
@@ -237,7 +243,15 @@ function RoomShell({
           <div className="flex items-center gap-1.5">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isLive ? "bg-emerald-400 animate-pulse" : status === "starting" ? "bg-emerald-400 animate-pulse" : status === "waiting" ? "bg-yellow-400" : "bg-white/20"
+                isLive
+                  ? "bg-emerald-400 animate-pulse"
+                  : status === "starting"
+                  ? "bg-emerald-400 animate-pulse"
+                  : status === "waiting"
+                  ? "bg-yellow-400"
+                  : status === "locked"
+                  ? "bg-cyan-400"
+                  : "bg-white/20"
               }`}
             />
             <span className="text-xs text-white/40 capitalize">{status}</span>

@@ -60,6 +60,9 @@ export default function Home() {
           <a href="#how" className="text-sm text-white/50 hover:text-white/90 transition-colors">
             How it works
           </a>
+          <Link href="/leaderboard" className="text-sm text-white/50 hover:text-white/90 transition-colors">
+            Leaderboard
+          </Link>
           <Link href="/create-bot" className="btn-primary text-sm font-medium px-4 py-2 rounded-lg text-white">
             Create bot
           </Link>

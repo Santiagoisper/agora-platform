@@ -27,6 +27,15 @@ interface Bot {
   skills: string[];
 }
 
+interface MatchEvent {
+  id: string;
+  eventType: string;
+  severity: string;
+  summary: string;
+  details: string | null;
+  createdAt: string;
+}
+
 interface RoomInteractiveProps {
   roomId: string;
   initialMessages: Message[];
@@ -54,9 +63,11 @@ export default function RoomInteractive({
   const [apiKey, setApiKey] = useState("");
   const [joining, setJoining] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [locking, setLocking] = useState(false);
   const [autoRun, setAutoRun] = useState(true);
   const [joinError, setJoinError] = useState("");
   const [applauds, setApplauds] = useState<Set<string>>(new Set());
+  const [events, setEvents] = useState<MatchEvent[]>([]);
   const [clockNow, setClockNow] = useState(() => Date.now());
   const autoAdvanceRef = useRef(false);
 
@@ -79,11 +90,33 @@ export default function RoomInteractive({
     }
   }, [roomId]);
 
+  const fetchEvents = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/events`);
+      if (!res.ok) return;
+      const data: MatchEvent[] = await res.json();
+      setEvents(data);
+    } catch {
+      // silent
+    }
+  }, [roomId]);
+
   useEffect(() => {
     if (isDemo || status !== "active") return;
-    const interval = setInterval(fetchMessages, 4000);
+    const interval = setInterval(() => {
+      void fetchMessages();
+      void fetchEvents();
+    }, 4000);
     return () => clearInterval(interval);
-  }, [isDemo, status, fetchMessages]);
+  }, [isDemo, status, fetchMessages, fetchEvents]);
+
+  useEffect(() => {
+    if (isDemo) return;
+    const initialFetch = window.setTimeout(() => {
+      void fetchEvents();
+    }, 0);
+    return () => window.clearTimeout(initialFetch);
+  }, [isDemo, fetchEvents]);
 
   const handleNextTurn = useCallback(async () => {
     setAdvancing(true);
@@ -98,11 +131,27 @@ export default function RoomInteractive({
       if (data.message) {
         setMessages((prev) => [...prev, data.message]);
       }
+      void fetchEvents();
       if (data.roomClosed) setStatus("closed");
     } catch (err) {
       console.error("Turn error:", err);
     } finally {
       setAdvancing(false);
+    }
+  }, [roomId, fetchEvents]);
+
+  const handleLockArena = useCallback(async () => {
+    setLocking(true);
+    setJoinError("");
+    try {
+      const res = await fetch(`/api/rooms/${roomId}/lock`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to lock arena");
+      setStatus(data.room.status);
+    } catch (err) {
+      setJoinError(err instanceof Error ? err.message : "Failed to lock arena");
+    } finally {
+      setLocking(false);
     }
   }, [roomId]);
 
@@ -122,6 +171,7 @@ export default function RoomInteractive({
         if (data.message) {
           setMessages((prev) => [...prev, data.message]);
         }
+        void fetchEvents();
         if (data.roomClosed) {
           setStatus("closed");
         }
@@ -134,7 +184,7 @@ export default function RoomInteractive({
     }, messages.length === 0 ? 3000 : 5000);
 
     return () => window.clearTimeout(timeout);
-  }, [advancing, autoRun, isDemo, messages.length, roomId, status]);
+  }, [advancing, autoRun, isDemo, messages.length, roomId, status, fetchEvents]);
 
   useEffect(() => {
     if (!showJoin || isDemo) return;
@@ -173,6 +223,7 @@ export default function RoomInteractive({
       if (data.firstMessage) {
         setMessages((prev) => [...prev, data.firstMessage]);
       }
+      void fetchEvents();
       if (data.firstMessageError) {
         setJoinError(`Joined but LLM error: ${data.firstMessageError}`);
       }
@@ -249,10 +300,12 @@ export default function RoomInteractive({
   return (
     <div className="flex flex-1 max-w-6xl mx-auto w-full px-6 py-6 gap-6">
       <div className="flex-1 flex flex-col gap-3 min-w-0">
-        {messages.length === 0 && status === "waiting" ? (
+        {messages.length === 0 && (status === "waiting" || status === "locked" || status === "draft") ? (
           <div className="glass-card rounded-xl px-5 py-12 text-center">
-            <p className="text-white/25 text-sm mb-1">Waiting for bots to join...</p>
-            <p className="text-white/15 text-xs">Add a second bot and the referee will start the round clock.</p>
+            <p className="text-white/25 text-sm mb-1">
+              {status === "locked" ? "Arena locked. Waiting for approved bots..." : "Waiting for bots to join..."}
+            </p>
+            <p className="text-white/15 text-xs">Add a second approved bot and the referee will start the round clock.</p>
           </div>
         ) : status === "starting" && messages.length === 0 ? (
           <div className="glass-card rounded-xl px-5 py-12 text-center border border-emerald-500/20 bg-emerald-500/8">
@@ -382,6 +435,37 @@ export default function RoomInteractive({
           </div>
         </div>
 
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5">
+            <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Match ledger</h3>
+          </div>
+          <div className="max-h-56 overflow-auto divide-y divide-white/5">
+            {events.length === 0 ? (
+              <div className="px-4 py-3 text-[11px] text-white/25">No events yet.</div>
+            ) : (
+              events.slice(-20).map((event) => (
+                <div key={event.id} className="px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-[11px] text-white/70">{event.summary}</div>
+                    <span
+                      className={`text-[10px] uppercase ${
+                        event.severity === "block"
+                          ? "text-red-300"
+                          : event.severity === "warn"
+                          ? "text-amber-300"
+                          : "text-white/30"
+                      }`}
+                    >
+                      {event.severity}
+                    </span>
+                  </div>
+                  {event.details && <div className="text-[10px] text-white/30 mt-1">{event.details}</div>}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
         <div className="glass-card rounded-xl p-4 flex flex-col gap-3">
           <h3 className="text-xs font-semibold text-white/30 uppercase tracking-widest">Referee</h3>
           <div className="text-sm text-white/70">Arena system</div>
@@ -452,10 +536,25 @@ export default function RoomInteractive({
 
         {status !== "closed" && !isDemo && (
           <>
-            <button onClick={() => setShowJoin(true)} className="btn-primary w-full py-3 rounded-xl text-white font-semibold text-sm">
-              Enter arena with your bot &rarr;
-            </button>
-            <p className="text-[10px] text-white/20 text-center -mt-2">Your bot joins on the next round</p>
+            {status === "draft" ? (
+              <>
+                <button
+                  onClick={handleLockArena}
+                  disabled={locking}
+                  className="btn-primary w-full py-3 rounded-xl text-white font-semibold text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {locking ? "Locking arena..." : "Lock arena for combat ->"}
+                </button>
+                <p className="text-[10px] text-white/20 text-center -mt-2">Locking freezes topic/context and enables bot join.</p>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setShowJoin(true)} className="btn-primary w-full py-3 rounded-xl text-white font-semibold text-sm">
+                  Enter arena with your bot &rarr;
+                </button>
+                <p className="text-[10px] text-white/20 text-center -mt-2">Your bot joins on the next round</p>
+              </>
+            )}
           </>
         )}
       </div>

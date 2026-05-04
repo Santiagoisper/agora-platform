@@ -1,6 +1,7 @@
 import { getDb } from "@/db";
 import { bots, messages, roomBots, rooms } from "@/db/schema";
 import { resolveVaultReference, revokeVaultReference } from "@/lib/key-vault";
+import { logMatchEvent } from "@/lib/match-events";
 import { decryptSecret } from "@/lib/secrets";
 import { asc, eq } from "drizzle-orm";
 
@@ -65,13 +66,27 @@ function mapAnthropicModel(model: string) {
 
 function scoreMessage(content: string, turn: number, roomType: string) {
   const normalized = content.toLowerCase();
-  const lengthScore = Math.min(2, Math.max(0, Math.floor(content.trim().length / 60)));
-  const evidenceScore = /(data|evidence|because|therefore|percent|%|study|according)/.test(normalized) ? 1 : 0;
-  const structureScore = /(however|but|yet|counter|opposing|risk|tradeoff)/.test(normalized) ? 1 : 0;
-  const pressureScore = roomType === "research" && /(citation|source|study|metric)/.test(normalized) ? 1 : 0;
-  const tempoScore = turn === 1 ? 1 : 0;
+  const clarity = Math.min(2, Math.max(0, Math.floor(content.trim().length / 80)));
+  const attack = /(argue|counter|refute|challenge|however|but)/.test(normalized) ? 1 : 0;
+  const defense = /(because|therefore|reason|justify|support)/.test(normalized) ? 1 : 0;
+  const evidence = /(data|evidence|percent|%|study|according|citation|source|metric)/.test(normalized) ? 1 : 0;
+  const coherence = /(first|second|finally|in summary|therefore|overall)/.test(normalized) ? 1 : 0;
+  const closing = turn > 1 && /(conclude|final|bottom line|net result)/.test(normalized) ? 1 : 0;
+  const researchBoost = roomType === "research" && evidence > 0 ? 1 : 0;
 
-  return Math.max(1, Math.min(5, 1 + lengthScore + evidenceScore + structureScore + pressureScore + tempoScore));
+  const total = Math.max(1, Math.min(10, 1 + clarity + attack + defense + evidence + coherence + closing + researchBoost));
+
+  return {
+    total,
+    breakdown: {
+      clarity,
+      attack,
+      defense,
+      evidence,
+      coherence,
+      closing: closing + researchBoost,
+    },
+  };
 }
 
 function pickWinningBot(scores: Map<string, number>) {
@@ -449,14 +464,31 @@ export async function appendNextRoomMessage(roomId: string) {
   }
 
   const speaker = participants[previousMessages.length % participants.length];
-  const content = await generateBotTurn({
-    roomTitle: room.title,
-    roomTopic: room.topic,
-    roomType: room.type,
-    participant: speaker,
-    turn: nextTurn,
-    previousMessages,
-  });
+  let content: string;
+  try {
+    content = await generateBotTurn({
+      roomTitle: room.title,
+      roomTopic: room.topic,
+      roomType: room.type,
+      participant: speaker,
+      turn: nextTurn,
+      previousMessages,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown provider error";
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      actorId: speaker.id,
+      eventType: "provider_error",
+      severity: "block",
+      summary: `Provider failed for ${speaker.name}.`,
+      details: message,
+    });
+    throw error;
+  }
+
+  const judged = scoreMessage(content, nextTurn, room.type);
 
   const [message] = await db
     .insert(messages)
@@ -465,9 +497,27 @@ export async function appendNextRoomMessage(roomId: string) {
       botId: speaker.id,
       content,
       turn: nextTurn,
-      score: scoreMessage(content, nextTurn, room.type),
+      score: judged.total,
     })
     .returning();
+
+  await logMatchEvent({
+    roomId,
+    actorType: "referee",
+    actorId: speaker.id,
+    eventType: "turn_generated",
+    summary: `Turn ${nextTurn} generated for ${speaker.name}.`,
+    details: `Provider=${inferProvider(speaker.model)} model=${speaker.model}`,
+  });
+
+  await logMatchEvent({
+    roomId,
+    actorType: "referee",
+    actorId: speaker.id,
+    eventType: "score_assigned",
+    summary: `Score ${judged.total} assigned to ${speaker.name} on turn ${nextTurn}.`,
+    details: JSON.stringify(judged.breakdown),
+  });
 
   const roomClosed = nextTurn >= MAX_ROOM_TURNS;
 
@@ -478,6 +528,7 @@ export async function appendNextRoomMessage(roomId: string) {
     }
     totals.set(message.botId, (totals.get(message.botId) ?? 0) + message.score);
     const winner = pickWinningBot(totals);
+    const winnerName = participants.find((bot) => bot.id === winner?.botId)?.name ?? "unknown";
 
     await db
       .update(rooms)
@@ -488,6 +539,15 @@ export async function appendNextRoomMessage(roomId: string) {
       })
       .where(eq(rooms.id, roomId));
     await purgeRoomApiKeys(roomId);
+
+    await logMatchEvent({
+      roomId,
+      actorType: "referee",
+      actorId: winner?.botId ?? null,
+      eventType: "winner_declared",
+      summary: `Winner declared: ${winnerName}.`,
+      details: winner ? `Final score ${winner.score}` : "No winner score available.",
+    });
   }
 
   return {

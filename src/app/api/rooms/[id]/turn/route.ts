@@ -20,6 +20,13 @@ export async function POST(
       return NextResponse.json({ error: "Room is closed" }, { status: 409 });
     }
 
+    if (room.status === "locked" || room.status === "draft") {
+      return NextResponse.json(
+        { error: "Room is not ready. Add bots first and wait for countdown." },
+        { status: 409 }
+      );
+    }
+
     if (room.status === "starting" && room.startsAt) {
       const startsAt = new Date(room.startsAt).getTime();
       const remainingMs = startsAt - Date.now();

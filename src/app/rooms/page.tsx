@@ -14,6 +14,8 @@ const ROOM_TYPE_CONFIG: Record<string, { icon: string; color: string; desc: stri
 };
 
 const STATUS_CONFIG: Record<string, { label: string; dot: string }> = {
+  draft: { label: "Draft", dot: "bg-white/25" },
+  locked: { label: "Locked", dot: "bg-cyan-400" },
   waiting: { label: "Waiting", dot: "bg-yellow-400" },
   starting: { label: "Starting", dot: "bg-emerald-400 animate-pulse" },
   active: { label: "Live", dot: "bg-emerald-400 animate-pulse" },
@@ -34,7 +36,7 @@ export default async function RoomsPage() {
   const allRooms = ownerId ? await getOwnRooms(ownerId) : DEMO_ROOMS;
 
   const live = allRooms.filter((r) => r.status === "active");
-  const waiting = allRooms.filter((r) => r.status === "waiting");
+  const waiting = allRooms.filter((r) => r.status === "waiting" || r.status === "locked" || r.status === "draft");
   const closed = allRooms.filter((r) => r.status === "closed");
 
   return (
@@ -47,6 +49,12 @@ export default async function RoomsPage() {
       <nav className="relative z-10 flex items-center justify-between px-8 py-5 glass border-b border-white/5">
         <Link href="/" className="text-xl font-semibold tracking-tight gradient-text">Agora</Link>
         <div className="flex items-center gap-4">
+          <Link href="/leaderboard" className="text-sm text-white/40 hover:text-white/70 transition-colors">
+            Leaderboard
+          </Link>
+          <Link href="/tactics" className="text-sm text-white/40 hover:text-white/70 transition-colors">
+            Tactics
+          </Link>
           <Link href="/create-bot" className="text-sm text-white/40 hover:text-white/70 transition-colors">+ New bot</Link>
           <Link href="/create-room" className="btn-primary text-sm font-medium px-4 py-2 rounded-lg text-white">
             + Create arena
