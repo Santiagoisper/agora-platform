@@ -2,6 +2,8 @@ import { getDb } from "@/db";
 import { bots, messages, roomBots, rooms } from "@/db/schema";
 import { resolveVaultReference, revokeVaultReference } from "@/lib/key-vault";
 import { logMatchEvent } from "@/lib/match-events";
+import { generateProviderMessage, inferProvider } from "@/lib/providers";
+import { acquireRefereeLock, releaseRefereeLock } from "@/lib/referee-lock";
 import { decryptSecret } from "@/lib/secrets";
 import { asc, eq, inArray } from "drizzle-orm";
 
@@ -29,9 +31,6 @@ export interface SerializedRoomMessage {
 const MAX_ROOM_TURNS = 12;
 const ROOM_TURN_COOLDOWN_MS = 12000;
 const ROOM_START_DELAY_MS = 3000;
-const OPENAI_API_URL = "https://api.openai.com/v1/responses";
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
-const ANTHROPIC_VERSION = "2023-06-01";
 const ELO_K = 24;
 const BOT_ELIMINATION_LOSS_LIMIT = 5;
 const LEGEND_TIER_TWO_WINS = 10;
@@ -54,22 +53,7 @@ const SKILL_PROMPTS: Record<string, string> = {
   critic: "Find the strongest weakness in the current line of thought.",
 };
 
-const ANTHROPIC_MODEL_MAP: Record<string, string> = {
-  "claude-haiku-4": "claude-3-5-haiku-20241022",
-  "claude-sonnet-4": "claude-sonnet-4-20250514",
-  "claude-opus-4": "claude-opus-4-20250514",
-};
-
-function inferProvider(model: string) {
-  if (model.startsWith("claude-")) return "anthropic";
-  return "openai";
-}
-
-function mapAnthropicModel(model: string) {
-  return ANTHROPIC_MODEL_MAP[model] ?? model;
-}
-
-function scoreMessage(content: string, turn: number, roomType: string) {
+export function scoreMessage(content: string, turn: number, roomType: string) {
   const normalized = content.toLowerCase();
   const clarity = Math.min(2, Math.max(0, Math.floor(content.trim().length / 80)));
   const attack = /(argue|counter|refute|challenge|however|but)/.test(normalized) ? 1 : 0;
@@ -106,7 +90,7 @@ function pickWinningBot(scores: Map<string, number>) {
   return winner;
 }
 
-function expectedScore(eloA: number, eloB: number) {
+export function expectedScore(eloA: number, eloB: number) {
   return 1 / (1 + Math.pow(10, (eloB - eloA) / 400));
 }
 
@@ -115,53 +99,6 @@ function deriveLegendTier(wins: number) {
   if (wins >= LEGEND_TIER_TWO_WINS) return 2;
   if (wins >= 5) return 1;
   return 0;
-}
-
-function extractOpenAIText(data: unknown) {
-  if (!data || typeof data !== "object") return null;
-
-  const output = (data as { output?: unknown[] }).output;
-  if (!Array.isArray(output)) return null;
-
-  const chunks: string[] = [];
-
-  for (const item of output) {
-    if (!item || typeof item !== "object") continue;
-    const content = (item as { content?: unknown[] }).content;
-    if (!Array.isArray(content)) continue;
-
-    for (const part of content) {
-      if (!part || typeof part !== "object") continue;
-      if ((part as { type?: string }).type === "output_text") {
-        const text = (part as { text?: string }).text;
-        if (typeof text === "string" && text.trim()) {
-          chunks.push(text.trim());
-        }
-      }
-    }
-  }
-
-  return chunks.length > 0 ? chunks.join("\n\n") : null;
-}
-
-function extractAnthropicText(data: unknown) {
-  if (!data || typeof data !== "object") return null;
-
-  const content = (data as { content?: unknown[] }).content;
-  if (!Array.isArray(content)) return null;
-
-  const chunks = content
-    .filter(
-      (part): part is { type: string; text: string } =>
-        !!part &&
-        typeof part === "object" &&
-        (part as { type?: string }).type === "text" &&
-        typeof (part as { text?: string }).text === "string"
-    )
-    .map((part) => part.text.trim())
-    .filter(Boolean);
-
-  return chunks.length > 0 ? chunks.join("\n\n") : null;
 }
 
 function buildConversationPrompt(input: {
@@ -205,81 +142,6 @@ function buildConversationPrompt(input: {
   ].join("\n\n");
 }
 
-async function generateOpenAIMessage(model: string, apiKey: string, prompt: string) {
-  const response = await fetch(OPENAI_API_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input: prompt,
-      text: {
-        format: {
-          type: "text",
-        },
-      },
-      max_output_tokens: 220,
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    const message =
-      typeof data?.error?.message === "string"
-        ? data.error.message
-        : "OpenAI request failed";
-    throw new Error(message);
-  }
-
-  const text = extractOpenAIText(data);
-  if (!text) {
-    throw new Error("OpenAI returned no text output");
-  }
-
-  return text;
-}
-
-async function generateAnthropicMessage(model: string, apiKey: string, prompt: string) {
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": ANTHROPIC_VERSION,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: mapAnthropicModel(model),
-      max_tokens: 220,
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    const message =
-      typeof data?.error?.message === "string"
-        ? data.error.message
-        : "Anthropic request failed";
-    throw new Error(message);
-  }
-
-  const text = extractAnthropicText(data);
-  if (!text) {
-    throw new Error("Anthropic returned no text output");
-  }
-
-  return text;
-}
-
 async function generateBotTurn(input: {
   roomTitle: string;
   roomTopic: string;
@@ -299,11 +161,7 @@ async function generateBotTurn(input: {
     previousMessages: input.previousMessages,
   });
 
-  if (inferProvider(input.participant.model) === "anthropic") {
-    return generateAnthropicMessage(input.participant.model, input.participant.apiKey, prompt);
-  }
-
-  return generateOpenAIMessage(input.participant.model, input.participant.apiKey, prompt);
+  return generateProviderMessage(input.participant.model, input.participant.apiKey, prompt);
 }
 
 export async function getRoomById(roomId: string) {
@@ -343,12 +201,14 @@ async function listRoomParticipantsWithKeys(roomId: string): Promise<RoomPartici
     .where(eq(roomBots.roomId, roomId))
     .orderBy(asc(roomBots.joinedAt));
 
-  return participants.map((participant) => ({
-    ...participant,
-    apiKey:
-      resolveVaultReference(participant.apiKey) ??
-      decryptSecret(participant.apiKey),
-  }));
+  return Promise.all(
+    participants.map(async (participant) => ({
+      ...participant,
+      apiKey:
+        (await resolveVaultReference(participant.apiKey)) ??
+        decryptSecret(participant.apiKey),
+    }))
+  );
 }
 
 async function purgeRoomApiKeys(roomId: string) {
@@ -360,7 +220,7 @@ async function purgeRoomApiKeys(roomId: string) {
     .where(eq(roomBots.roomId, roomId));
 
   for (const row of roomKeyRefs) {
-    revokeVaultReference(row.apiKey);
+    await revokeVaultReference(row.apiKey);
   }
 
   await db
@@ -493,24 +353,38 @@ export async function listProcessableRoomIds(limit = 32) {
 }
 
 export async function runRefereeTick(limit = 32) {
-  const ids = await listProcessableRoomIds(limit);
-  let processed = 0;
-  let advanced = 0;
-
-  for (const roomId of ids) {
-    const room = await reconcileRoomState(roomId);
-    if (!room) continue;
-
-    processed += 1;
-    if (room.status !== "active") continue;
-
-    const result = await appendNextRoomMessage(roomId);
-    if (result.message || result.roomClosed) {
-      advanced += 1;
-    }
+  const locked = await acquireRefereeLock();
+  if (!locked) {
+    return { processed: 0, advanced: 0, rooms: 0, skipped: true };
   }
 
-  return { processed, advanced, rooms: ids.length };
+  try {
+    const ids = await listProcessableRoomIds(limit);
+    let processed = 0;
+    let advanced = 0;
+
+    for (const roomId of ids) {
+      const room = await reconcileRoomState(roomId);
+      if (!room) continue;
+
+      processed += 1;
+      if (room.status !== "active") continue;
+
+      try {
+        const result = await appendNextRoomMessage(roomId);
+        if (result.message || result.roomClosed) {
+          advanced += 1;
+        }
+      } catch (error) {
+        // Provider failures are already logged as match events; keep the tick going.
+        console.error(`Referee tick failed for room ${roomId}:`, error);
+      }
+    }
+
+    return { processed, advanced, rooms: ids.length, skipped: false };
+  } finally {
+    await releaseRefereeLock();
+  }
 }
 
 export async function appendNextRoomMessage(roomId: string) {

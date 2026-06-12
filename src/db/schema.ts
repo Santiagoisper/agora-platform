@@ -64,6 +64,18 @@ export const roomBots = pgTable("room_bots", {
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
 });
 
+export const botKeyVault = pgTable("bot_key_vault", {
+  id: text("id").primaryKey(),
+  encryptedKey: text("encrypted_key").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const refereeLocks = pgTable("referee_locks", {
+  name: text("name").primaryKey(),
+  lockedUntil: timestamp("locked_until").notNull(),
+});
+
 export const matchEvents = pgTable("match_events", {
   id: uuid("id").defaultRandom().primaryKey(),
   roomId: uuid("room_id").notNull().references(() => rooms.id),

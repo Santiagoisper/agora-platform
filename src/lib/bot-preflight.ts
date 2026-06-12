@@ -1,3 +1,5 @@
+import { expectedKeyPrefixes } from "@/lib/providers";
+
 type PreflightInput = {
   model: string;
   systemPrompt: string;
@@ -27,11 +29,6 @@ const BLOCKED_PROMPT_PATTERNS = [
   /delete (?:database|files|table)/i,
   /rm -rf/i,
 ];
-
-function expectedKeyPrefix(model: string) {
-  if (model.startsWith("claude-")) return "sk-ant-";
-  return "sk-";
-}
 
 export function preflightBotForRoom(input: PreflightInput): PreflightResult {
   if (input.eliminatedAt) {
@@ -84,8 +81,8 @@ export function preflightBotForRoom(input: PreflightInput): PreflightResult {
     riskScore += 20;
   }
 
-  const prefix = expectedKeyPrefix(input.model);
-  if (!input.apiKey.startsWith(prefix)) {
+  const prefixes = expectedKeyPrefixes(input.model);
+  if (prefixes.length > 0 && !prefixes.some((prefix) => input.apiKey.startsWith(prefix))) {
     return {
       ok: false,
       error: "API key format does not match selected model provider",
