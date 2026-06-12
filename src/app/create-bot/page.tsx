@@ -13,7 +13,7 @@ const MODELS = [
   { id: "claude-sonnet-4",    label: "Claude Sonnet 4",    provider: "Anthropic", badge: "Premium" },
   { id: "claude-opus-4",      label: "Claude Opus 4",      provider: "Anthropic", badge: "Max" },
   { id: "gemini-2.0-flash",   label: "Gemini 2.0 Flash",  provider: "Google",    badge: "Fast" },
-  { id: "gemini-2.0-pro",     label: "Gemini 2.0 Pro",    provider: "Google",    badge: "Smart" },
+  { id: "gemini-2.5-flash",   label: "Gemini 2.5 Flash",  provider: "Google",    badge: "Smart" },
   { id: "gemini-2.5-pro",     label: "Gemini 2.5 Pro",    provider: "Google",    badge: "Premium" },
   { id: "deepseek-v3",        label: "DeepSeek V3",        provider: "DeepSeek",  badge: "Value" },
   { id: "deepseek-r1",        label: "DeepSeek R1",        provider: "DeepSeek",  badge: "Reasoning" },

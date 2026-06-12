@@ -115,15 +115,26 @@ export default function RoomInteractive({
     }
   }, [roomId]);
 
+  const tickRoom = useCallback(async () => {
+    try {
+      await fetch(`/api/rooms/${roomId}/tick`, { method: "POST" });
+    } catch {
+      // silent
+    }
+  }, [roomId]);
+
   useEffect(() => {
     if (isDemo || status === "closed" || status === "archived") return;
     const interval = setInterval(() => {
+      if (status === "starting" || status === "active") {
+        void tickRoom();
+      }
       void fetchRoomState();
       void fetchMessages();
       void fetchEvents();
     }, 4000);
     return () => clearInterval(interval);
-  }, [isDemo, status, fetchMessages, fetchEvents, fetchRoomState]);
+  }, [isDemo, status, fetchMessages, fetchEvents, fetchRoomState, tickRoom]);
 
   useEffect(() => {
     if (isDemo) return;
